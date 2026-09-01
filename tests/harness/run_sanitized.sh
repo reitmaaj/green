@@ -42,9 +42,24 @@ is_sanitizer_report() {
 
 status=0
 
-# 1. pass fixtures: zero diagnostics, no sanitizer report
+# Sanitizer verification runs over lint-tagged fixtures only: matrix and
+# format fixtures are not clang-tidy semantic fixtures and do not fit the
+# zero-or-targeted diagnostic model.
+parse_lint() {
+    LINT=""
+    line=$(sed -n '1p' "$1" 2>/dev/null)
+    case "$line" in
+    "/* green: "*)
+        LINT=$(printf '%s' "$line" | sed -n 's/.*lint=\([^ ]*\).*/\1/p')
+        ;;
+    esac
+}
+
+# 1. pass fixtures (lint=pass): zero diagnostics, no sanitizer report
 for f in "$ROOT"/tests/fixtures/pass/*.c; do
     [ -e "$f" ] || continue
+    parse_lint "$f"
+    [ "$LINT" = "pass" ] || continue
     if "$TIDY" -load="$PLUGIN" "$CHECKS" --extra-arg=-std=c89 "$f" 2>"$ROOT/.agent/tmp/san-pass.err" |
         grep -qE "error:|warning:"; then
         echo "FAIL pass fixture: $(basename "$f")"
@@ -57,9 +72,11 @@ for f in "$ROOT"/tests/fixtures/pass/*.c; do
     fi
 done
 
-# 2. fail fixtures: at least one diagnostic, no sanitizer report
+# 2. fail fixtures (lint=<check>): at least one diagnostic, no sanitizer report
 for f in "$ROOT"/tests/fixtures/fail/*.c; do
     [ -e "$f" ] || continue
+    parse_lint "$f"
+    [ -n "$LINT" ] && [ "$LINT" != "pass" ] || continue
     if ! "$TIDY" -load="$PLUGIN" "$CHECKS" --extra-arg=-std=c89 "$f" 2>"$ROOT/.agent/tmp/san-fail.err" |
         grep -qE "error:|warning:"; then
         echo "FAIL fail fixture (no diagnostic): $(basename "$f")"
