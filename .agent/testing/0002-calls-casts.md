@@ -37,14 +37,20 @@ GIVEN a cast from a type to its same canonical type
 WHEN `green lint` runs
 THEN a `green-cast-boundary` error is reported
 
-SCENARIO redundant void-pointer cast is rejected
-GIVEN `node = (struct node *)raw;` where implicit `void *` conversion is
-      well-typed
+SCENARIO void-pointer conversion is accepted in both directions
+GIVEN `node = (struct node *)raw;`, `return (struct node *)raw;`, or
+      `take((void *)node);` where implicit `void *` conversion is well-typed
 WHEN `green lint` runs
-THEN a `green-cast-boundary` error is reported
+THEN no error is reported (whether the cast is written explicitly or implied)
+
+SCENARIO unrelated object-pointer conversion is accepted
+GIVEN `pb = (struct b *)pa;` where `struct a *` and `struct b *` are distinct
+      object pointer types
+WHEN `green lint` runs
+THEN no error is reported; access through the converted pointer remains
+     subject to C's effective-type/aliasing rules
 
 SCENARIO representation escape is rejected
-GIVEN integer<->pointer, unrelated-object-punning, object<->function, or
-      qualifier-discarding casts
+GIVEN integer<->pointer, object<->function, or qualifier-discarding casts
 WHEN `green lint` runs
 THEN a `green-cast-boundary` error is reported

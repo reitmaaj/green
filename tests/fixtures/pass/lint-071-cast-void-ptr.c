@@ -1,9 +1,11 @@
-/* green: lint=green-cast-boundary */
+/* green: lint=pass matrix=pass format=pass */
 
 struct node
 {
     int v;
 };
+
+int f(void *raw);
 
 int f(void *raw)
 {

@@ -36,6 +36,10 @@ STRUCTURE     -> explicit statement/block structure
 Expressions may calculate values but may not hide state transitions,
 effects, sequencing, or value-dependent control flow.
 
+green rejects semantic opacity, not unusual-looking C syntax. A meaningful
+explicit cast or a pure object-like macro marks a semantic boundary rather
+than hiding one.
+
 ## Components
 
 ```text

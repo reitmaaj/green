@@ -41,11 +41,13 @@ execution.
 - PASS: intentional narrowing/signedness/domain casts (e.g. guarded
   `(unsigned int)size`, `(unsigned char)value`).
 - FAIL: a cast from a type to its same canonical type.
-- FAIL: a redundant `(struct node *)` cast where implicit `void *`
-  conversion is well-typed with the same semantics.
-- FAIL: integer<->pointer casts, unrelated object-pointer casts for type
-  punning, object<->function pointer casts, and casts discarding
-  const/volatile.
+- PASS: `void *` conversions in both directions, written or implied
+  (`(struct node *)raw`, `(void *)node`).
+- PASS: unrelated object-pointer conversions (`pb = (struct b *)pa;`).
+  Access through the converted pointer is governed by C's
+  effective-type/aliasing rules, not by this cast check.
+- FAIL: integer<->pointer casts, object<->function pointer casts, and casts
+  discarding const/volatile.
 
 ## green-null
 
@@ -74,10 +76,29 @@ execution.
 - PASS: `#include`, object-like macros, ordinary include guards.
 - FAIL: project-defined function-like macros.
 - FAIL: token-pasting and stringification macros.
-- FAIL: object-like macros that introduce runtime control or mutation
-  syntax. The empty `GREEN_PURE` annotation is exempt.
-- Applies only to project-owned files, never system/vendor headers unless
-  explicitly requested.
+- FAIL: project object-like macros whose expansion injects hidden control or
+  transition structure (e.g. `? :`, `&&`, `||`, assignment, `return`,
+  statement blocks around computation). Attribution walks the macro
+  expansion ancestry and reports the innermost owned object-like macro.
+- PASS: project object-like macros whose expansion is a pure value/type/
+  token abstraction (arithmetic, bitwise, `sizeof(struct {...})`, `void *`
+  constants). The empty `GREEN_PURE` annotation is exempt.
+- Applies only to project-owned files; ownership is determined by
+  `project_roots` (or, when unconfigured, the primary translation unit's
+  directory tree), never by `-isystem`/system-header classification.
+
+## Ownership
+
+- A source location is project-owned when its canonical file path lies
+  beneath a configured `project_roots` entry (or, when none are configured,
+  beneath the canonical directory of the primary translation unit) and is
+  not beneath an `exclude` entry.
+- Containment compares path components, not string prefixes: `/project/src`
+  owns `/project/src/x.c` but not `/project/src-old/x.c`.
+- Compiler classification (`-isystem`, system-header bits, angle vs quoted
+  include) MUST NOT affect ownership.
+- Source locations that cannot resolve to a real source file (virtual,
+  builtin, scratch buffers) are simply not owned.
 
 ## green-toolchain-branching
 

@@ -1,4 +1,4 @@
-/* green: lint=green-cast-boundary */
+/* green: lint=pass matrix=pass format=pass */
 
 struct a
 {
@@ -8,6 +8,8 @@ struct b
 {
     int y;
 };
+
+int f(struct a *pa);
 
 int f(struct a *pa)
 {

@@ -46,11 +46,11 @@ transitions, effects, sequencing, or value-dependent control flow.* The ten
 | `green-transition-boundary` | assignment/update only as a complete statement or `for` clause; only prefix `++`/`--` |
 | `green-effect-boundary` | an effectful call must form a complete transition |
 | `green-pure-contract` | validate `GREEN_PURE`-marked functions (no visible mutation/effect/volatile) |
-| `green-cast-boundary` | reject redundant and representation-escaping casts |
+| `green-cast-boundary` | reject redundant, qualifier-discarding, integer/pointer and object/function-pointer casts; object-pointer conversions (incl. `void *`) allowed |
 | `green-null` | `NULL` is the canonical null-pointer spelling |
 | `green-declaration` | one object per declaration; prototype forms; `(void)` |
 | `green-fallthrough` | no implicit fallthrough; exact `/* fall through */` marker |
-| `green-preprocessor` | no function-like / token-manipulation / structure macros |
+| `green-preprocessor` | no function-like / token-manipulation macros; object-like macros may not hide control/transition at expansion |
 | `green-toolchain-branching` | no compiler-identity conditionals |
 
 `readability-braces-around-statements` (with `ShortStatementLines = 0`) is
@@ -138,9 +138,10 @@ stripping `-std`/`-W`/`-o`/`-c`/codegen options), requires that the normalized
 `-fsyntax-only`. The original build remains authoritative for producing
 binaries.
 
-> The keys `project_roots`, `exclude`, `compatibility_paths`, and
-> `pure_functions` are accepted by the parser but their enforcement wiring is
-> pending in V1; they currently have no effect on the checks.
+> `project_roots`, `exclude`, `compatibility_paths`, and `pure_functions`
+> are enforced. Ownership of a source file is decided by `project_roots`
+> (or, when none are configured, the primary translation unit's directory
+> tree) and is never inferred from `-isystem`/system-header classification.
 
 ---
 
@@ -258,5 +259,3 @@ acceptance criteria, design, stories, and testing scenarios.
 - On toolchains where valgrind cannot load the monolithic `libclang-cpp.so`,
   `just valgrind` reports UNSUPPORTED; memory-safety/UB coverage is provided
   by `just sanitize` (ASan + UBSan).
-- `project_roots`, `exclude`, `compatibility_paths`, and `pure_functions`
-  config keys are parsed but not yet enforced.

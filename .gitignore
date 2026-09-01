@@ -21,6 +21,7 @@
 !.clang-format
 
 !src/
+!src/*/
 !src/*.cc
 !src/*.h
 !src/*/*.cc
@@ -43,6 +44,8 @@
 !tests/fixtures/pass/*.c
 !tests/fixtures/fail/
 !tests/fixtures/fail/*.c
+!tests/fixtures/external/
+!tests/fixtures/external/*.h
 !tests/driver/
 !tests/driver/sample/
 !tests/driver/sample/src/

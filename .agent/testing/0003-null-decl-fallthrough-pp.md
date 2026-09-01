@@ -50,6 +50,41 @@ GIVEN token pasting or stringification macros
 WHEN `green lint` runs
 THEN a `green-preprocessor` error is reported
 
+SCENARIO pure object-like macro is accepted
+GIVEN a project object-like macro whose replacement is a pure value, type,
+      or token abstraction, e.g. `#define BAD_VALUE (((j89_len) - 1))`,
+      `#define MASK (A | B)`, `#define NIL ((void *)0)`, or
+      `#define SZ sizeof(struct { int x; })`
+WHEN `green lint` runs
+THEN no error is reported
+
+SCENARIO object-like macro hiding control is rejected at expansion
+GIVEN a project object-like macro whose expansion produces hidden control or
+      transition structure, e.g. `#define CHOOSE (a ? b : c)`,
+      `#define BOTH (a && b)`, `#define UPDATE (x += 1)`, or
+      `#define RETURN return`
+WHEN `green lint` runs
+THEN a `green-preprocessor` error is reported, attributed to the macro
+
+SCENARIO macro control attribution walks the expansion ancestry
+GIVEN `#define A (x && y)` and `#define B A` where both are owned
+WHEN `green lint` runs
+THEN a `green-preprocessor` error is reported, attributed to the innermost
+     owned macro `A`
+
+SCENARIO owned macro wrapping an external control macro is flagged
+GIVEN `#define OUTER SOME_EXTERNAL_MACRO` where the external macro expands to
+      hidden control
+WHEN `green lint` runs
+THEN a `green-preprocessor` error is reported, attributed to `OUTER`
+
+SCENARIO ownership is governed by project roots, not compiler classification
+GIVEN a project-owned header included via `-isystem` that contains an
+      object-like macro with a pure term replacement
+WHEN `green lint` runs
+THEN no error is reported; the header is owned by path, not masked by
+     `-isystem`
+
 SCENARIO compiler-identity branching is rejected
 GIVEN project source using `__STDC_VERSION__`, `__GNUC__`, or `__clang__`
 WHEN `green lint` runs
