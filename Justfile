@@ -1,6 +1,7 @@
 set shell := ["sh", "-eu", "-c"]
 
 BUILD := ".agent/tmp/build"
+BUILD_SAN := ".agent/tmp/build-sanitize"
 
 default:
     @just --list
@@ -23,6 +24,16 @@ e2e: build
 
 # Run every test
 test: unit e2e
+
+# Build with AddressSanitizer + UndefinedBehaviorSanitizer and run the suite.
+sanitize:
+    cmake -S . -B {{BUILD_SAN}} -DGREEN_SANITIZE=address,undefined
+    cmake --build {{BUILD_SAN}} -j
+    tests/harness/run_sanitized.sh
+
+# Run the driver and plugin under valgrind (memcheck).
+valgrind:
+    tests/harness/run_valgrind.sh
 
 # Lint shell scripts and check C++ formatting
 lint:

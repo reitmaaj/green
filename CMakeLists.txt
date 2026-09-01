@@ -10,6 +10,18 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Optional sanitizers: -DGREEN_SANITIZE=address,undefined (comma-separated).
+set(GREEN_SANITIZE "" CACHE STRING
+    "Sanitizer flags, e.g. address,undefined (applied to driver and plugin)")
+if(GREEN_SANITIZE)
+    string(REPLACE "," ";" GREEN_SANITIZE_LIST "${GREEN_SANITIZE}")
+    foreach(SAN ${GREEN_SANITIZE_LIST})
+        add_compile_options(-fsanitize=${SAN} -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=${SAN})
+    endforeach()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g")
+endif()
+
 find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
 

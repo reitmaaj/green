@@ -15,3 +15,8 @@ Build and test with `just`:
 - `just test` — unit + e2e
 - `just lint` — shellcheck + clang-format dry-run
 - `just check` — test + lint
+- `just sanitize` — build `green`/`green-tidy` with AddressSanitizer + UBSan
+  and run the full fixture suite under them (memory-safety/UB verification)
+- `just valgrind` — attempt the driver + plugin under valgrind memcheck;
+  degrades gracefully (UNSUPPORTED) on toolchains where valgrind cannot load
+  the monolithic libclang-cpp.so
