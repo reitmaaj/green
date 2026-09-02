@@ -1,4 +1,4 @@
-/* green: lint=pass */
+/* green: lint=green-outline */
 
 int neg_abs(int x)
 {

@@ -1,4 +1,4 @@
-/* green: lint=pass matrix=pass format=pass */
+/* green: lint=green-outline matrix=pass format=pass */
 
 #define NIL ((void *)0)
 

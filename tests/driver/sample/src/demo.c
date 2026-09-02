@@ -7,43 +7,34 @@ struct node
     int value;
 };
 
-int pure_abs(int x);
-int process(int n, int *out);
+int smaller(int a, int b);
+int magnitude(int x);
+int node_nonnull(struct node *p);
 
-GREEN_PURE
-int pure_abs(int x)
+int smaller(int a, int b)
 {
-    int y;
-    if (x < 0)
+    if (a < b)
     {
-        y = -x;
+        return a;
     }
-    else
-    {
-        y = x;
-    }
-    return y;
+    return b;
 }
 
-int process(int n, int *out)
+GREEN_PURE
+int magnitude(int x)
 {
-    int i;
-    int sum;
-    struct node *nptr;
+    if (x < 0)
+    {
+        return -x;
+    }
+    return x;
+}
 
-    sum = 0;
-    nptr = NULL;
-    for (i = 0; i < n; ++i)
+int node_nonnull(struct node *p)
+{
+    if (p != NULL)
     {
-        sum = sum + out[i];
+        return 1;
     }
-    if (nptr != NULL)
-    {
-        sum = sum + nptr->value;
-    }
-    if (sum < 0)
-    {
-        sum = pure_abs(sum);
-    }
-    return sum;
+    return 0;
 }

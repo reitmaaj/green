@@ -1186,5 +1186,155 @@ void ToolchainBranchingCheck::checkCondition(SourceRange ConditionRange,
     (void)SM;
 }
 
+// -- OutlineCheck ------------------------------------------------------------
+namespace
+{
+
+// A leaf statement carries no statement-level control flow.
+bool isLeafStatement(const Stmt *S)
+{
+    if (!S)
+        return false;
+    return isa<NullStmt>(S) || isa<DeclStmt>(S) || isa<Expr>(S) ||
+           isa<ReturnStmt>(S);
+}
+
+// A "sole return" is a bare return or a braced compound of exactly one return.
+const ReturnStmt *soleReturn(const Stmt *S)
+{
+    if (!S)
+        return nullptr;
+    if (const auto *R = dyn_cast<ReturnStmt>(S))
+        return R;
+    if (const auto *CS = dyn_cast<CompoundStmt>(S))
+    {
+        unsigned n = 0;
+        for (const Stmt *X : CS->body())
+            if (!isa<LabelStmt>(X))
+                ++n;
+        if (n == 1)
+            for (const Stmt *X : CS->body())
+                if (const auto *R = dyn_cast<ReturnStmt>(X))
+                    return R;
+    }
+    return nullptr;
+}
+
+// The canonical dispatcher reduced from outlining:
+//
+//     for (;;) { switch (pc) { ... } }
+//
+// The emitted machine is the single place a function may contain a loop or a
+// switch; its cases drive single-block helpers through an explicit program
+// counter. Nothing else about the body may loop.
+bool isCanonicalDispatcher(const CompoundStmt *Body)
+{
+    unsigned forCount = 0;
+    for (const Stmt *S : Body->body())
+    {
+        if (const auto *F = dyn_cast<ForStmt>(S))
+        {
+            if (F->getInit() || F->getCond() || F->getInc())
+                return false; // not `for (;;)`
+            const auto *FB = dyn_cast_or_null<CompoundStmt>(F->getBody());
+            if (!FB)
+                return false;
+            unsigned n = 0;
+            bool hasSwitch = false;
+            for (const Stmt *X : FB->body())
+            {
+                ++n;
+                if (isa<SwitchStmt>(X))
+                    hasSwitch = true;
+            }
+            if (n != 1 || !hasSwitch)
+                return false;
+            ++forCount;
+        }
+        else if (isa<WhileStmt>(S) || isa<DoStmt>(S))
+        {
+            return false;
+        }
+    }
+    return forCount == 1;
+}
+
+// True when the body is already in outlined (leaf) form: straight-line
+// statements plus at most one else-less conditional-return transfer. Any loop,
+// switch, goto, label, if/else, or deeper control flow means the function's
+// basic blocks have not been extracted and must be outlined.
+bool isOutlinedTerminalForm(const CompoundStmt *Body)
+{
+    SmallVector<const Stmt *, 8> B;
+    for (const Stmt *S : Body->body())
+        B.push_back(S);
+    const size_t n = B.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        const Stmt *S = B[i];
+        if (isLeafStatement(S))
+            continue;
+        // else-less conditional-return: `if (cond) { return A; }` whose next
+        // statement is a bare return. This is the canonical branch dispatch.
+        if (const auto *If = dyn_cast<IfStmt>(S))
+        {
+            if (If->getElse() || !soleReturn(If->getThen()))
+                return false;
+            if (i + 1 < n && soleReturn(B[i + 1]))
+            {
+                ++i; // consume the trailing return
+                continue;
+            }
+            return false;
+        }
+        // Standalone straight-line block scope.
+        if (const auto *CS = dyn_cast<CompoundStmt>(S))
+        {
+            bool leavesOnly = true;
+            for (const Stmt *X : CS->body())
+                if (!isLeafStatement(X))
+                {
+                    leavesOnly = false;
+                    break;
+                }
+            if (leavesOnly)
+                continue;
+        }
+        return false; // loop, switch, goto, label, if/else, or nested control
+    }
+    return true;
+}
+
+} // namespace
+
+void OutlineCheck::registerMatchers(MatchFinder *Finder)
+{
+    Finder->addMatcher(functionDecl(isDefinition()).bind("fn"), this);
+}
+
+void OutlineCheck::check(const MatchFinder::MatchResult &Result)
+{
+    Owned.configure(*Result.SourceManager);
+    const SourceManager &SM = *Result.SourceManager;
+    const auto *FD = Result.Nodes.getNodeAs<FunctionDecl>("fn");
+    if (!FD)
+        return;
+    SourceLocation Loc = FD->getLocation();
+    SourceLocation UseSite = SM.getExpansionRange(Loc).getBegin();
+    if (!Owned.isOwned(UseSite, SM))
+        return;
+    if (FD->getName() == "main")
+        return; // main is never outlined
+    const auto *Body = dyn_cast_or_null<CompoundStmt>(FD->getBody());
+    if (!Body || Body->body().empty())
+        return; // no body, or nothing to outline
+    if (isCanonicalDispatcher(Body) || isOutlinedTerminalForm(Body))
+        return;
+    diag(Loc,
+         "function body contains basic blocks that have not been extracted "
+         "into file-local helper functions",
+         DiagnosticIDs::Error);
+}
+
 } // namespace tidy
 } // namespace clang

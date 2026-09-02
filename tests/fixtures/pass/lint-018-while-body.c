@@ -1,4 +1,4 @@
-/* green: lint=pass */
+/* green: lint=green-outline */
 
 int accumulate(int *v, int n)
 {

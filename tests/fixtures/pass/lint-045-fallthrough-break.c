@@ -1,4 +1,4 @@
-/* green: lint=pass */
+/* green: lint=green-outline */
 
 int stage(int s)
 {

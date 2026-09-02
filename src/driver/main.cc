@@ -74,7 +74,8 @@ std::string buildTidyConfig(const Config &Cfg)
         "green-effect-boundary", "green-pure-contract",
         "green-cast-boundary",   "green-null",
         "green-declaration",     "green-fallthrough",
-        "green-preprocessor",    "green-toolchain-branching"};
+        "green-preprocessor",    "green-toolchain-branching",
+        "green-outline"};
     std::string Roots = joinList(Cfg.ProjectRoots);
     std::string Exclude = joinList(Cfg.Exclude);
     std::string Compat = joinList(Cfg.CompatibilityPaths);
@@ -104,7 +105,8 @@ int runLint(const std::string &Tidy, const std::string &Plugin,
         "-checks=-*,green-hidden-control,green-transition-boundary,"
         "green-effect-boundary,green-pure-contract,green-cast-boundary,"
         "green-null,green-declaration,green-fallthrough,green-preprocessor,"
-        "green-toolchain-branching,readability-braces-around-statements";
+        "green-toolchain-branching,green-outline,"
+        "readability-braces-around-statements";
     int Status = EXIT_GREEN;
     for (const char *Std : {"c89", "c23"})
     {

@@ -28,7 +28,7 @@ GCC=$(command -v gcc)
 CLANG=$(command -v clang)
 CLANG_FORMAT=$(command -v clang-format)
 PROFILE="$ROOT/share/green/clang-format.yaml"
-CHECKS="-checks=-*,green-hidden-control,green-transition-boundary,green-effect-boundary,green-pure-contract,green-cast-boundary,green-null,green-declaration,green-fallthrough,green-preprocessor,green-toolchain-branching,readability-braces-around-statements"
+CHECKS="-checks=-*,green-hidden-control,green-transition-boundary,green-effect-boundary,green-pure-contract,green-cast-boundary,green-null,green-declaration,green-fallthrough,green-preprocessor,green-toolchain-branching,green-outline,readability-braces-around-statements"
 BASELINE="-pedantic-errors -Wall -Wextra -Werror -Wconversion -Wsign-conversion -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition -Wundef -Wshadow -Wformat=2 -Wcast-qual -fsyntax-only"
 
 fail() {

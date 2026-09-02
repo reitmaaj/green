@@ -1,14 +1,14 @@
 /* green: lint=green-outline */
 
-int until_zero(int n)
+int sum(int n)
 {
+    int i;
     int s;
 
     s = 0;
-    while (n > 0)
+    for (i = 0; i < n; ++i)
     {
-        s = s + n;
-        --n;
+        s = s + i;
     }
     return s;
 }

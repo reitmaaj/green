@@ -1,16 +1,16 @@
 /* green: lint=green-outline */
 
-int classify(int x)
+int pick(int c)
 {
     int r;
 
-    if (x < 0)
+    if (c)
     {
-        r = -1;
+        r = 1;
     }
     else
     {
-        r = 1;
+        r = 2;
     }
     return r;
 }

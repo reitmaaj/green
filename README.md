@@ -37,7 +37,7 @@ formatting. All seven must pass.
 ### Semantic rules (clang-tidy plugin)
 
 The governing rule: *expressions may calculate values but may not hide state
-transitions, effects, sequencing, or value-dependent control flow.* The ten
+transitions, effects, sequencing, or value-dependent control flow.* The eleven
 `green-*` checks implement it:
 
 | Check | Rule |
@@ -52,9 +52,21 @@ transitions, effects, sequencing, or value-dependent control flow.* The ten
 | `green-fallthrough` | no implicit fallthrough; exact `/* fall through */` marker |
 | `green-preprocessor` | no function-like / token-manipulation macros; object-like macros may not hide control/transition at expansion |
 | `green-toolchain-branching` | no compiler-identity conditionals |
+| `green-outline` | every basic block must be outlined to a file-local helper; only straight-line, leaf, and canonical `for(;;){switch(pc)}` dispatcher bodies are accepted |
 
 `readability-braces-around-statements` (with `ShortStatementLines = 0`) is
 reused for mandatory braces.
+
+> **Outline rule.** `green-outline` is a *block-level* discipline layered on
+> top of the expression rules: a function may reach for control flow only as
+> far as one terminal transfer (a final `return`, an else-less
+> `if (cond) { return A; }` followed by `return B;`, or the canonical
+> `for (;;) { switch (pc) { ... } }` dispatcher over single-block helpers).
+> A body that still contains an un-extracted `if`/`else`, a `while`/`for`/`do`
+> loop, a `switch`, or several sequential decisions is reported by
+> `green-outline` because its basic blocks should be extracted into file-local
+> helpers. The automated `green outline` transform is a follow-up; the check
+> already enforces the outlined shape today.
 
 ---
 

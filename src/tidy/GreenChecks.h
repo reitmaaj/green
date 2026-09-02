@@ -298,6 +298,28 @@ class ToolchainBranchingCheck : public ClangTidyCheck
     void checkCondition(SourceRange ConditionRange, const SourceManager &SM);
 };
 
+// green-outline --------------------------------------------------------------
+// Every owned function whose body reaches for internal control flow beyond the
+// outlined (leaf) form must itself be outlined: each source basic block becomes
+// a file-local helper driven by an explicit program counter. A function body is
+// acceptable when it is straight-line plus at most one terminal transfer
+// (return; conditional-return; switch of returns) or it is the canonical
+// outline dispatcher `for (;;) { switch (pc) { ... } }`. `main` is exempt.
+class OutlineCheck : public ClangTidyCheck
+{
+  public:
+    OutlineCheck(llvm::StringRef Name, ClangTidyContext *Context)
+        : ClangTidyCheck(Name, Context),
+          Owned(Options.get("ProjectRoots", ""), Options.get("Exclude", ""))
+    {
+    }
+    void registerMatchers(ast_matchers::MatchFinder *Finder) override;
+    void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
+
+  private:
+    Ownership Owned;
+};
+
 } // namespace tidy
 } // namespace clang
 
