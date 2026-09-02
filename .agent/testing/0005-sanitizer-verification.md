@@ -28,3 +28,10 @@ GIVEN ASan/UBSan reports a real defect in green code
 WHEN fixing
 THEN a failing reproduction fixture and acceptance/BDD doc are added first,
      then the defect is fixed, then the reproduction and full suite pass
+
+SCENARIO every semantic check is exercised under sanitizers
+GIVEN the sanitizer harness mirrors the e2e semantic check set
+WHEN the run_sanitized.sh CHECKS list omits one registered green-* check
+     (e.g. green-flat) that the e2e suite exercises
+THEN green-flat fail fixtures report "no diagnostic" and the suite fails;
+     the omission is a defect fixed by adding the check to the CHECKS list

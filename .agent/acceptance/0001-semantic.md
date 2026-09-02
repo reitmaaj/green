@@ -112,3 +112,23 @@ execution.
 
 - Every controlled body (`if/else/while/do/for`) uses braces; empty bodies
   use empty blocks, never null statements; `else if` remains a chain.
+
+## green-flat
+
+- PASS: the function's own top level computes freely; a straight-line pure
+  worker with no nested block is flat by construction.
+- PASS: a nested control/`{}` body that is thin: no inline computation and at
+  most one glue statement per straight-line run (a single discarded call, a
+  single result-binding call, a single prefix `++`/`--`, or a single
+  literal/call initializer, followed only by a decision/transfer).
+- PASS: decision/iteration sites that delegate real work to a worker function
+  (worker/controller rule).
+- FAIL: any operator-built value inside a nested body: an assignment whose
+  right-hand side is computed (`s = s + i;`), a compound assignment
+  (`s += n;`), or a declaration initializer that computes (`int y = n * i;`),
+  in an `if`/`else` branch, a loop body, or a bare `{}` block.
+- FAIL: a straight-line run of more than one glue statement inside a nested
+  body (two discarded calls, call plus prefix update, two bindings).
+- Note: a `switch` case body is inspected only when the case forms its own
+  nested `{}` block; unbraced case statements are not inline-scanned by the
+  current check (see `flat-008`, `flat-017`, `flat-020`).

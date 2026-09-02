@@ -1,8 +1,10 @@
-# Testing: e2e fixture catalog (100 pass + 100 fail)
+# Testing: e2e fixture catalog (100 pass + 100 fail, growing)
 
 Each fixture in `tests/fixtures/pass|fail/NNN-<dim>-<case>.c` carries a metadata
 header `/* green: lint=... matrix=... format=... */`. A dimension is asserted
-only when tagged.
+only when tagged. Counts below are illustrative category targets; the live
+totals (121 pass / 132 fail after the `green-flat` expansion) are the
+authoritative number of `.c` files in each directory.
 
 - `lint=pass` / `lint=<check>` : clang-tidy, asserted under C89 and C23.
 - `matrix=pass` / `matrix=c89|c23` : gcc+clang with the strict green baseline.
@@ -43,7 +45,11 @@ only when tagged.
   - green-toolchain-branching: `__GNUC__`, `__clang__`, `__STDC_VERSION__`,
     `defined(__GNUC__)`.
   - green-flat: inline computation inside a nested block (`if`/`else`, loop,
-    `switch`, or bare `{}`) — see `flat-*.c` fixtures.
+    `switch`, or bare `{}`) — see `flat-*.c` fixtures. The dedicated `flat-*.c`
+    catalog holds 22 passing and 34 failing fixtures covering thin bodies
+    (single glue per run, delegation to workers, nested control) and every
+    failing shape (inline computation and over-glued runs in `if`/`else`,
+    `while`/`for`/`do`, braced `switch` cases, and bare `{}` blocks).
   - readability-braces-around-statements: unbraced if/else/while/for/do,
     null-statement empty body, unbraced else branch.
 - matrix (15): C99/C23-only syntax rejected by the C89 cell (`//` comment,

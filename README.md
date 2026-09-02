@@ -237,15 +237,15 @@ CGREEN      PASS
 ## Development and testing
 
 ```sh
-just test       # unit tests + 200-fixture e2e suite
+just test       # unit tests + e2e fixture suite
 just lint       # shellcheck + clang-format dry-run on the C++ sources
 just check      # test + lint
 just sanitize   # ASan + UBSan build; run the lint fixtures under both
 just valgrind   # valgrind memcheck; degrades to UNSUPPORTED on this toolchain
 ```
 
-The e2e suite lives in `tests/fixtures/` with 100 passing and 100 failing
-examples. Each fixture declares its expectations in a metadata header:
+The e2e suite lives in `tests/fixtures/` (121 passing and 132 failing
+examples). Each fixture declares its expectations in a metadata header:
 
 ```c
 /* green: lint=pass matrix=pass format=pass */
