@@ -149,6 +149,12 @@ if ! (cd "$ROOT/tests/driver/sample" && "$GREEN" check) >/dev/null 2>&1; then
     status=1
 fi
 
+# Outline smoke test (transform + green-clean + idempotence).
+if ! "$ROOT/tests/harness/run_outline.sh" >/dev/null 2>&1; then
+    echo "FAIL: green outline smoke suite"
+    status=1
+fi
+
 echo "green e2e fixtures checked: $count"
 if [ "$status" -eq 0 ]; then
     echo "green e2e suite: PASS"

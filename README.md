@@ -65,8 +65,9 @@ reused for mandatory braces.
 > A body that still contains an un-extracted `if`/`else`, a `while`/`for`/`do`
 > loop, a `switch`, or several sequential decisions is reported by
 > `green-outline` because its basic blocks should be extracted into file-local
-> helpers. The automated `green outline` transform is a follow-up; the check
-> already enforces the outlined shape today.
+> helpers. `green outline` performs that extraction automatically and its
+> output is itself green-clean (no hidden control, mandatory Allman braces,
+> canonical formatting).
 
 ---
 
@@ -90,13 +91,14 @@ doctor` reports a fatal error on a mismatch.
 
 ```sh
 just setup     # configure the CMake build
-just build     # build the `green` driver and the `green-tidy` plugin
+just build     # build the `green` driver, `green-outline`, and the plugin
 ```
 
 Install layout:
 
 ```text
 bin/green
+bin/green-outline
 lib/green/<clang-major>/green-tidy.so
 share/green/clang-format.yaml
 share/green/default-config.yaml
@@ -187,6 +189,16 @@ form. (`green format` without `--check` is verify-oriented in this release.)
 Apply mechanically semantics-preserving fix-its: missing braces,
 discarded-result postfix→prefix, redundant pointer-cast removal, `NULL`
 spelling, and formatting.
+
+### `green outline [file...]`
+
+Extract the basic blocks of every function that still contains un-extracted
+control flow into file-local helpers driven by an explicit program counter
+(the shape `green-outline` enforces). Already-outlined translation units are
+reported and left untouched, so repeated runs are a no-op. The emitted source
+is formatted to the canonical profile and re-verified: it must pass `lint`,
+`matrix`, and `format`. Runs in place; back up before applying to a live tree.
+(With no file arguments, processes the whole project.)
 
 ### `green semantic <file.i>`
 

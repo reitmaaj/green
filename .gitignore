@@ -51,3 +51,11 @@
 !tests/driver/sample/src/
 !tests/driver/sample/src/*.c
 !tests/driver/sample/*.yaml
+
+# Vendored bb-lifter transform core (src/outline/bblift)
+!src/outline/
+!src/outline/bblift/
+!src/outline/bblift/*.h
+!src/outline/bblift/*/
+!src/outline/bblift/*/*.cc
+!src/outline/bblift/*/*.h

@@ -5,6 +5,7 @@
 #include "Fix.h"
 #include "Format.h"
 #include "Matrix.h"
+#include "Outline.h"
 #include "Process.h"
 #include "green/version.h"
 
@@ -33,6 +34,8 @@ void printUsage()
            "  matrix               four compiler cells only\n"
            "  semantic <file.i>    semantic-only checks on preprocessed input\n"
            "  fix                  apply safe, semantics-preserving fix-its\n"
+           "  outline [file...]    extract basic blocks into file-local "
+           "helpers\n"
            "  doctor               validate the toolchain environment\n"
            "  --version            print version and exit\n";
 }
@@ -210,7 +213,7 @@ int main(int Argc, char **Argv)
 
     // Collect the set of files to process (whole DB if none specified).
     std::vector<std::string> Files;
-    if (Args.empty() || Cmd == "format" || Cmd == "fix")
+    if (Args.empty() || Cmd == "format" || Cmd == "fix" || Cmd == "outline")
     {
         for (const auto &E : GccEntries)
             Files.push_back(E.File);
@@ -243,6 +246,11 @@ int main(int Argc, char **Argv)
         int S = runLint(Tidy, GREEN_PLUGIN_PATH, CompileDBDir, TidyConfig,
                         Files, Fatal);
         return Fatal ? EXIT_UNAVAILABLE : S;
+    }
+    if (Cmd == "outline")
+    {
+        return runOutline(Tidy, GREEN_PLUGIN_PATH, GREEN_OUTLINE_PATH, Format,
+                          GREEN_FORMAT_PATH, CompileDBDir, TidyConfig, Files);
     }
     if (Cmd == "semantic")
     {

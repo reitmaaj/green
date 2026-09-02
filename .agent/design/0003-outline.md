@@ -2,26 +2,31 @@
 
 ## Module boundaries
 
+The transform core is the vendored bb-lifter (`clang-outliner`) subtree, kept
+under `src/outline/bblift` with its upstream file layout, formatting, and
+`bblift` namespace. It is a separate compile unit so its (llvm) formatting is
+not forced into green's profile.
+
 ```text
-src/outline/
-    Outline.h                 public command entry points
-    CFGBuilder.cc             builds clang::CFG with pinned options (sole
-                              owner of clang::CFG construction)
-    CFGNormalizer.cc          clang::CFG -> FunctionModel
-    FunctionCollector.cc      selects owned FunctionDecl definitions
-    Eligibility.cc            rejects unsupported constructs early
-    VariableAnalysis.cc       classifies locals -> frame fields
-    SourceSafety.cc           macro/file/range rewriteability checks
-    NameGenerator.cc          enum/struct/helper/state/pc naming + collision
-    ExpressionRewriter.cc     source text for copied statements with
-                              semantically bound frame-field rewrites
-    HelperEmitter.cc          one helper per block
-    DispatcherEmitter.cc      frame, param init, dispatch loop, return
-    Emitter.cc                green-conformant emission (braces, no ?:)
+src/outline/bblift/        vendored bb-lifter core (frontend/analysis/model/
+                           emit/verify), namespace bblift
+    src/outline/bblift/main.cc   its CLI (built as the `green-outline` binary)
+src/driver/Outline.h/.cc   green-side entry point (mirrors runFix/runLint)
 ```
 
-These are free functions in a namespace; the existing driver
-(`src/driver/`) owns CLI/compilation-database concerns and config reuse.
+`green outline` is a driver command that shells out to the `green-outline`
+binary with the project's clang compilation database, exactly as green already
+shells out to `clang-tidy`/`gcc`/`clang`/`clang-format`. It is not linked into
+the driver's process; this keeps bb-lifter's `llvm::cl`/`CommonOptionsParser`
+CLI out of green's own argument parsing.
+
+`green outline` per file:
+1. skip the file when the green-outline gate finds no un-extracted blocks
+   (idempotence);
+2. run `green-outline` to transform the file in place;
+3. run the canonical formatter;
+4. re-run the full clang-tidy suite in C89 and C23; any diagnostic fails the
+   command (fail-safe).
 
 ## CFG authority
 
@@ -47,7 +52,9 @@ branch points, switch dispatch nodes, or direct goto targets.
 
 Hidden control in expression position is forbidden by
 `green-hidden-control`. The outliner therefore never emits `cond ? A : B`
-as a terminator. Transfers:
+as a terminator. This is the one deliberate delta from upstream bb-lifter:
+vendored `src/outline/bblift/emit/HelperEmitter.cc` lowers the `Branch`
+terminator to the braced else-less form below instead of `?:`. Transfers:
 
 - Fallthrough: `return B_NEXT;`
 - Branch: an explicit `if (cond) { return B_TRUE; }` followed by

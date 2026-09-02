@@ -39,12 +39,14 @@ valgrind:
 lint:
     @for f in $(find tests scripts -name '*.sh' 2>/dev/null); do \
         shellcheck -s sh "$f" && shellcheck -s bash "$f"; done
-    @for f in $(find src include -name '*.cc' -o -name '*.h'); do \
+    @for f in $(find src include -name '*.cc' -o -name '*.h' 2>/dev/null | \
+        grep -v '/bblift/'); do \
         clang-format --dry-run --Werror "$f" || { echo "needs formatting: $f"; exit 1; }; done
 
-# Format all C++ sources
+# Format all C++ sources (vendored outline core keeps its upstream style)
 format:
-    @for f in $(find src include -name '*.cc' -o -name '*.h'); do \
+    @for f in $(find src include -name '*.cc' -o -name '*.h' 2>/dev/null | \
+        grep -v '/bblift/'); do \
         clang-format -i "$f"; done
 
 # Build, run all tests, and lint
