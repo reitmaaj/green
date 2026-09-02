@@ -16,9 +16,6 @@ only when tagged.
   `void*` implicit conversion, `NULL` usage, single-object declarations,
   prototypes/`(void)`, braced control (incl. else-if, empty blocks), explicit
   fallthrough, object-like macros and includes, toolchain-neutral source.
-- outline (3): already-outlined source accepted — straight-line function,
-  else-less conditional-return leaf, and a canonical `for(;;){switch(pc)}`
-  dispatcher over single-block helpers.
 - matrix (15): dialect-neutral, `-Wconversion/-Wsign-conversion`-clean under
   both C89 and C23 with both compilers.
 - format (15): canonical Allman/4-space/80-column presentation.
@@ -45,8 +42,8 @@ only when tagged.
     macro-introduced control and `return`.
   - green-toolchain-branching: `__GNUC__`, `__clang__`, `__STDC_VERSION__`,
     `defined(__GNUC__)`.
-  - green-outline: un-outlined control flow (multi-basic-block bodies that are
-    not the canonical outline dispatcher) — see `outline-*.c` fixtures.
+  - green-flat: inline computation inside a nested block (`if`/`else`, loop,
+    `switch`, or bare `{}`) — see `flat-*.c` fixtures.
   - readability-braces-around-statements: unbraced if/else/while/for/do,
     null-statement empty body, unbraced else branch.
 - matrix (15): C99/C23-only syntax rejected by the C89 cell (`//` comment,

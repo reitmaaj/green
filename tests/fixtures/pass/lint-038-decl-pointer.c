@@ -1,4 +1,4 @@
-/* green: lint=green-outline */
+/* green: lint=pass */
 
 #include <stddef.h>
 

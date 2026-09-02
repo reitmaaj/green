@@ -1,4 +1,4 @@
-/* green: lint=green-outline */
+/* green: lint=pass */
 
 int f(int a, int b)
 {

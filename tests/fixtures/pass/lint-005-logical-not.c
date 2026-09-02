@@ -1,4 +1,4 @@
-/* green: lint=green-outline */
+/* green: lint=pass */
 
 int not_zero(int a)
 {

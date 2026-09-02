@@ -52,22 +52,17 @@ transitions, effects, sequencing, or value-dependent control flow.* The eleven
 | `green-fallthrough` | no implicit fallthrough; exact `/* fall through */` marker |
 | `green-preprocessor` | no function-like / token-manipulation macros; object-like macros may not hide control/transition at expansion |
 | `green-toolchain-branching` | no compiler-identity conditionals |
-| `green-outline` | every basic block must be outlined to a file-local helper; only straight-line, leaf, and canonical `for(;;){switch(pc)}` dispatcher bodies are accepted |
+| `green-flat` | inline work is welcome at a function's top level, but a *nested* block (`if`/`else`, loop, `switch`, bare `{}`) must be thin: no inline computation and at most one glue call per straight-line run; real work inside a decision/iteration region belongs in a worker |
 
 `readability-braces-around-statements` (with `ShortStatementLines = 0`) is
 reused for mandatory braces.
 
-> **Outline rule.** `green-outline` is a *block-level* discipline layered on
-> top of the expression rules: a function may reach for control flow only as
-> far as one terminal transfer (a final `return`, an else-less
-> `if (cond) { return A; }` followed by `return B;`, or the canonical
-> `for (;;) { switch (pc) { ... } }` dispatcher over single-block helpers).
-> A body that still contains an un-extracted `if`/`else`, a `while`/`for`/`do`
-> loop, a `switch`, or several sequential decisions is reported by
-> `green-outline` because its basic blocks should be extracted into file-local
-> helpers. `green outline` performs that extraction automatically and its
-> output is itself green-clean (no hidden control, mandatory Allman braces,
-> canonical formatting).
+> **Worker/controller rule.** A function's top level is its own straight-line
+> flow and may compute freely. But inside any nested block — an `if`/`else`
+> body, a loop body, a `switch`/`case` body, or an explicit bare `{}` block —
+> real computation is the smell: it should live in a worker function the code
+> calls, so each decision/iteration site stays a single thin delegation. This
+> keeps controllers and workers independently readable and testable.
 
 ---
 
@@ -91,14 +86,13 @@ doctor` reports a fatal error on a mismatch.
 
 ```sh
 just setup     # configure the CMake build
-just build     # build the `green` driver, `green-outline`, and the plugin
+just build     # build the `green` driver and the `green-tidy` plugin
 ```
 
 Install layout:
 
 ```text
 bin/green
-bin/green-outline
 lib/green/<clang-major>/green-tidy.so
 share/green/clang-format.yaml
 share/green/default-config.yaml
@@ -189,16 +183,6 @@ form. (`green format` without `--check` is verify-oriented in this release.)
 Apply mechanically semantics-preserving fix-its: missing braces,
 discarded-result postfix→prefix, redundant pointer-cast removal, `NULL`
 spelling, and formatting.
-
-### `green outline [file...]`
-
-Extract the basic blocks of every function that still contains un-extracted
-control flow into file-local helpers driven by an explicit program counter
-(the shape `green-outline` enforces). Already-outlined translation units are
-reported and left untouched, so repeated runs are a no-op. The emitted source
-is formatted to the canonical profile and re-verified: it must pass `lint`,
-`matrix`, and `format`. Runs in place; back up before applying to a live tree.
-(With no file arguments, processes the whole project.)
 
 ### `green semantic <file.i>`
 

@@ -1,4 +1,4 @@
-/* green: lint=green-outline */
+/* green: lint=pass */
 
 int clamp(int x, int lo, int hi)
 {

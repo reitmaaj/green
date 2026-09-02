@@ -1186,133 +1186,170 @@ void ToolchainBranchingCheck::checkCondition(SourceRange ConditionRange,
     (void)SM;
 }
 
-// -- OutlineCheck ------------------------------------------------------------
+// -- FlatCheck ---------------------------------------------------------------
 namespace
 {
 
-// A leaf statement carries no statement-level control flow.
-bool isLeafStatement(const Stmt *S)
+// Maximum inline glue statements allowed in one straight-line run of a
+// controller (K). One delegation per decision site; more must be a worker.
+constexpr unsigned kFlatK = 1;
+
+bool isControlStmt(const Stmt *S)
 {
     if (!S)
         return false;
-    return isa<NullStmt>(S) || isa<DeclStmt>(S) || isa<Expr>(S) ||
-           isa<ReturnStmt>(S);
+    return isa<IfStmt>(S) || isa<WhileStmt>(S) || isa<DoStmt>(S) ||
+           isa<ForStmt>(S) || isa<SwitchStmt>(S) || isa<GotoStmt>(S) ||
+           isa<IndirectGotoStmt>(S) || isa<LabelStmt>(S) || isa<CaseStmt>(S) ||
+           isa<DefaultStmt>(S);
 }
 
-// A "sole return" is a bare return or a braced compound of exactly one return.
-const ReturnStmt *soleReturn(const Stmt *S)
+bool isTerminator(const Stmt *S)
 {
     if (!S)
-        return nullptr;
-    if (const auto *R = dyn_cast<ReturnStmt>(S))
-        return R;
-    if (const auto *CS = dyn_cast<CompoundStmt>(S))
-    {
-        unsigned n = 0;
-        for (const Stmt *X : CS->body())
-            if (!isa<LabelStmt>(X))
-                ++n;
-        if (n == 1)
-            for (const Stmt *X : CS->body())
-                if (const auto *R = dyn_cast<ReturnStmt>(X))
-                    return R;
-    }
-    return nullptr;
+        return false;
+    return isa<ReturnStmt>(S) || isa<BreakStmt>(S) || isa<ContinueStmt>(S);
+}
+// A call, literal (optionally signed), or plain identifier load counts as a
+// "simple" RHS; any operator-built value does not. An explicit cast to a null
+// constant (NULL) is also simple.
+bool isSimpleExpr(const Expr *E)
+{
+    E = E->IgnoreParenImpCasts();
+    if (const auto *CE = dyn_cast<CStyleCastExpr>(E))
+        if (isa<IntegerLiteral>(CE->getSubExpr()->IgnoreParenImpCasts()))
+            E = CE->getSubExpr();
+    if (const auto *UO = dyn_cast<UnaryOperator>(E))
+        if (UO->getOpcode() == UO_Minus || UO->getOpcode() == UO_Plus)
+            E = UO->getSubExpr()->IgnoreParenImpCasts();
+    if (isa<CallExpr>(E) || isa<IntegerLiteral>(E) || isa<FloatingLiteral>(E) ||
+        isa<CharacterLiteral>(E) || isa<StringLiteral>(E) ||
+        isa<DeclRefExpr>(E))
+        return true;
+    return false;
 }
 
-// The canonical dispatcher reduced from outlining:
-//
-//     for (;;) { switch (pc) { ... } }
-//
-// The emitted machine is the single place a function may contain a loop or a
-// switch; its cases drive single-block helpers through an explicit program
-// counter. Nothing else about the body may loop.
-bool isCanonicalDispatcher(const CompoundStmt *Body)
+// Glue: a discarded call, a prefix ++/--, an assignment/binding of a call or a
+// constant. Anything else is inline computation that belongs in a worker.
+enum class FlatClass
 {
-    unsigned forCount = 0;
-    for (const Stmt *S : Body->body())
+    NotActionable,
+    Glue,
+    Work
+};
+
+FlatClass classifyExpr(const Expr *E)
+{
+    E = E->IgnoreParenImpCasts();
+    if (isa<CallExpr>(E))
+        return FlatClass::Glue;
+    if (const auto *UO = dyn_cast<UnaryOperator>(E))
     {
-        if (const auto *F = dyn_cast<ForStmt>(S))
+        if (UO->getOpcode() == UO_PreInc || UO->getOpcode() == UO_PreDec)
+            return FlatClass::Glue;
+    }
+    if (const auto *BO = dyn_cast<BinaryOperator>(E))
+    {
+        if (BO->isAssignmentOp())
         {
-            if (F->getInit() || F->getCond() || F->getInc())
-                return false; // not `for (;;)`
-            const auto *FB = dyn_cast_or_null<CompoundStmt>(F->getBody());
-            if (!FB)
-                return false;
-            unsigned n = 0;
-            bool hasSwitch = false;
-            for (const Stmt *X : FB->body())
+            if (BO->getOpcode() == BO_Assign && isSimpleExpr(BO->getRHS()))
+                return FlatClass::Glue;
+            return FlatClass::Work; // computed RHS, or compound assignment
+        }
+        return FlatClass::Work; // value-producing expression
+    }
+    return FlatClass::Work;
+}
+
+FlatClass classifyStmt(const Stmt *S)
+{
+    if (isa<Expr>(S)) // expression statement (clang has no ExprStmt node)
+        return classifyExpr(cast<const Expr>(S));
+    if (const auto *DS = dyn_cast<DeclStmt>(S))
+    {
+        for (const Decl *D : DS->decls())
+        {
+            if (const auto *VD = dyn_cast<VarDecl>(D))
             {
-                ++n;
-                if (isa<SwitchStmt>(X))
-                    hasSwitch = true;
+                if (const Expr *Init = VD->getInit())
+                    return isSimpleExpr(Init) ? FlatClass::Glue
+                                              : FlatClass::Work;
             }
-            if (n != 1 || !hasSwitch)
-                return false;
-            ++forCount;
         }
-        else if (isa<WhileStmt>(S) || isa<DoStmt>(S))
-        {
-            return false;
-        }
+        return FlatClass::NotActionable; // plain declaration, typedef, etc.
     }
-    return forCount == 1;
+    return FlatClass::NotActionable;
 }
-
-// True when the body is already in outlined (leaf) form: straight-line
-// statements plus at most one else-less conditional-return transfer. Any loop,
-// switch, goto, label, if/else, or deeper control flow means the function's
-// basic blocks have not been extracted and must be outlined.
-bool isOutlinedTerminalForm(const CompoundStmt *Body)
+struct FlatReport
 {
-    SmallVector<const Stmt *, 8> B;
-    for (const Stmt *S : Body->body())
-        B.push_back(S);
-    const size_t n = B.size();
-    for (size_t i = 0; i < n; ++i)
+    bool hasWork = false; // inline computation inside a nested block
+    bool hasRun = false;  // a run of > K glue statements inside a nested block
+};
+
+// Applies the "thin" rule to a nested block (a control/switch body, a bare
+// {} block): no inline computation, and at most kFlatK glue statements per
+// straight-line run.
+static void scanNestedBlock(const CompoundStmt *CS, FlatReport &R)
+{
+    unsigned run = 0;
+    for (const Stmt *S : CS->body())
     {
-        const Stmt *S = B[i];
-        if (isLeafStatement(S))
+        if (isControlStmt(S) || isTerminator(S) || isa<CompoundStmt>(S))
+        {
+            run = 0; // a decision site, transfer, or block boundary
             continue;
-        // else-less conditional-return: `if (cond) { return A; }` whose next
-        // statement is a bare return. This is the canonical branch dispatch.
-        if (const auto *If = dyn_cast<IfStmt>(S))
-        {
-            if (If->getElse() || !soleReturn(If->getThen()))
-                return false;
-            if (i + 1 < n && soleReturn(B[i + 1]))
-            {
-                ++i; // consume the trailing return
-                continue;
-            }
-            return false;
         }
-        // Standalone straight-line block scope.
-        if (const auto *CS = dyn_cast<CompoundStmt>(S))
+        switch (classifyStmt(S))
         {
-            bool leavesOnly = true;
-            for (const Stmt *X : CS->body())
-                if (!isLeafStatement(X))
-                {
-                    leavesOnly = false;
-                    break;
-                }
-            if (leavesOnly)
-                continue;
+        case FlatClass::Work:
+            R.hasWork = true;
+            run = 0;
+            break;
+        case FlatClass::Glue:
+            ++run;
+            if (run > kFlatK)
+                R.hasRun = true;
+            break;
+        default:
+            break;
         }
-        return false; // loop, switch, goto, label, if/else, or nested control
     }
-    return true;
 }
+
+// The function body is the single free (top-level) scope. Every other compound
+// in the subtree is a nested block and must be thin. RecursiveASTVisitor is
+// used so descent is safe; the first compound visited is the root.
+class FlatScanner : public RecursiveASTVisitor<FlatScanner>
+{
+  public:
+    explicit FlatScanner(FlatReport &R) : R(R)
+    {
+    }
+
+    bool VisitCompoundStmt(CompoundStmt *CS)
+    {
+        if (!rootSeen)
+        {
+            rootSeen = true; // top-level scope: inline work is allowed
+            return true;
+        }
+        scanNestedBlock(CS, R);
+        return true;
+    }
+
+  private:
+    bool rootSeen = false;
+    FlatReport &R;
+};
 
 } // namespace
 
-void OutlineCheck::registerMatchers(MatchFinder *Finder)
+void FlatCheck::registerMatchers(MatchFinder *Finder)
 {
     Finder->addMatcher(functionDecl(isDefinition()).bind("fn"), this);
 }
 
-void OutlineCheck::check(const MatchFinder::MatchResult &Result)
+void FlatCheck::check(const MatchFinder::MatchResult &Result)
 {
     Owned.configure(*Result.SourceManager);
     const SourceManager &SM = *Result.SourceManager;
@@ -1323,17 +1360,23 @@ void OutlineCheck::check(const MatchFinder::MatchResult &Result)
     SourceLocation UseSite = SM.getExpansionRange(Loc).getBegin();
     if (!Owned.isOwned(UseSite, SM))
         return;
-    if (FD->getName() == "main")
-        return; // main is never outlined
     const auto *Body = dyn_cast_or_null<CompoundStmt>(FD->getBody());
     if (!Body || Body->body().empty())
-        return; // no body, or nothing to outline
-    if (isCanonicalDispatcher(Body) || isOutlinedTerminalForm(Body))
         return;
-    diag(Loc,
-         "function body contains basic blocks that have not been extracted "
-         "into file-local helper functions",
-         DiagnosticIDs::Error);
+    FlatReport Report;
+    FlatScanner Scanner(Report);
+    Scanner.TraverseStmt(const_cast<CompoundStmt *>(Body));
+    if (Report.hasWork || Report.hasRun)
+    {
+        std::string Msg;
+        if (Report.hasWork)
+            Msg = "inline computation inside a control/block body; extract it "
+                  "into a worker function";
+        else
+            Msg = "more than one inline statement inside a control/block body; "
+                  "extract it into a worker function";
+        diag(Loc, Msg, DiagnosticIDs::Error);
+    }
 }
 
 } // namespace tidy

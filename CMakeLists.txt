@@ -46,36 +46,6 @@ target_compile_definitions(green-tidy PRIVATE
     GREEN_CLANG_VERSION="${CLANG_VERSION_STRING}"
     GREEN_LLVM_VERSION="${LLVM_PACKAGE_VERSION}")
 
-# --- green-bblift (vendored bb-lifter transform core) ------------------------
-# Adopted from the sibling clang-outliner project. The `green outline` command
-# drives this core; its CLI main() is not part of the library.
-set(GREEN_BBLIFT_SOURCES
-    src/outline/bblift/frontend/Action.cc
-    src/outline/bblift/frontend/Consumer.cc
-    src/outline/bblift/frontend/FunctionCollector.cc
-    src/outline/bblift/analysis/Eligibility.cc
-    src/outline/bblift/analysis/CFGBuilder.cc
-    src/outline/bblift/analysis/CFGNormalizer.cc
-    src/outline/bblift/analysis/VariableAnalysis.cc
-    src/outline/bblift/analysis/SourceSafety.cc
-    src/outline/bblift/emit/NameGenerator.cc
-    src/outline/bblift/emit/TypePrinter.cc
-    src/outline/bblift/emit/ExpressionRewriter.cc
-    src/outline/bblift/emit/HelperEmitter.cc
-    src/outline/bblift/emit/ReplacementBuilder.cc
-    src/outline/bblift/verify/StructuralVerifier.cc)
-add_library(green-bblift STATIC ${GREEN_BBLIFT_SOURCES})
-target_include_directories(green-bblift PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/outline/bblift)
-target_link_libraries(green-bblift PUBLIC ${GREEN_CLANG_LIBS})
-
-# Standalone transform driver (vendored bb-lifter CLI). `green outline` shells
-# out to this, like green does for clang-tidy/clang-format.
-add_executable(green-outline src/outline/bblift/main.cc)
-target_include_directories(green-outline PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/outline/bblift)
-target_link_libraries(green-outline PRIVATE green-bblift ${GREEN_CLANG_LIBS})
-
 # --- green driver -----------------------------------------------------------
 add_executable(green
     src/driver/main.cc
@@ -85,12 +55,9 @@ add_executable(green
     src/driver/Process.cc
     src/driver/Format.cc
     src/driver/Fix.cc
-    src/driver/Outline.cc
     src/driver/Doctor.cc
     src/driver/Driver.cc)
-target_link_libraries(green PRIVATE green-bblift ${GREEN_CLANG_LIBS})
-target_compile_definitions(green PRIVATE
-    GREEN_OUTLINE_PATH="${CMAKE_CURRENT_BINARY_DIR}/green-outline")
+target_link_libraries(green PRIVATE ${GREEN_CLANG_LIBS})
 target_compile_definitions(green PRIVATE
     GREEN_CLANG_VERSION="${CLANG_VERSION_STRING}"
     GREEN_LLVM_VERSION="${LLVM_PACKAGE_VERSION}"

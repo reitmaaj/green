@@ -298,17 +298,18 @@ class ToolchainBranchingCheck : public ClangTidyCheck
     void checkCondition(SourceRange ConditionRange, const SourceManager &SM);
 };
 
-// green-outline --------------------------------------------------------------
-// Every owned function whose body reaches for internal control flow beyond the
-// outlined (leaf) form must itself be outlined: each source basic block becomes
-// a file-local helper driven by an explicit program counter. A function body is
-// acceptable when it is straight-line plus at most one terminal transfer
-// (return; conditional-return; switch of returns) or it is the canonical
-// outline dispatcher `for (;;) { switch (pc) { ... } }`. `main` is exempt.
-class OutlineCheck : public ClangTidyCheck
+// green-flat -----------------------------------------------------------------
+// Inline work is welcome at a function's top level (its own straight-line
+// flow). It is the smell only when it sits inside a *nested* block - an
+// if/else body, a loop body, a switch/case body, or an explicit bare {} block.
+// Every nested block must be thin: no inline computation, and at most one glue
+// statement (a discarded call, a prefix update, a constant init/assignment, or
+// a call-result binding) per straight-line run. Real work inside a decision or
+// iteration region belongs in a worker function the code calls.
+class FlatCheck : public ClangTidyCheck
 {
   public:
-    OutlineCheck(llvm::StringRef Name, ClangTidyContext *Context)
+    FlatCheck(llvm::StringRef Name, ClangTidyContext *Context)
         : ClangTidyCheck(Name, Context),
           Owned(Options.get("ProjectRoots", ""), Options.get("Exclude", ""))
     {

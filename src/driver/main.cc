@@ -5,7 +5,6 @@
 #include "Fix.h"
 #include "Format.h"
 #include "Matrix.h"
-#include "Outline.h"
 #include "Process.h"
 #include "green/version.h"
 
@@ -34,8 +33,6 @@ void printUsage()
            "  matrix               four compiler cells only\n"
            "  semantic <file.i>    semantic-only checks on preprocessed input\n"
            "  fix                  apply safe, semantics-preserving fix-its\n"
-           "  outline [file...]    extract basic blocks into file-local "
-           "helpers\n"
            "  doctor               validate the toolchain environment\n"
            "  --version            print version and exit\n";
 }
@@ -72,13 +69,17 @@ std::string joinList(const std::vector<std::string> &V)
 // so the options are repeated across every green-* check.
 std::string buildTidyConfig(const Config &Cfg)
 {
-    static const char *Checks[] = {
-        "green-hidden-control",  "green-transition-boundary",
-        "green-effect-boundary", "green-pure-contract",
-        "green-cast-boundary",   "green-null",
-        "green-declaration",     "green-fallthrough",
-        "green-preprocessor",    "green-toolchain-branching",
-        "green-outline"};
+    static const char *Checks[] = {"green-hidden-control",
+                                   "green-transition-boundary",
+                                   "green-effect-boundary",
+                                   "green-pure-contract",
+                                   "green-cast-boundary",
+                                   "green-null",
+                                   "green-declaration",
+                                   "green-fallthrough",
+                                   "green-preprocessor",
+                                   "green-toolchain-branching",
+                                   "green-flat"};
     std::string Roots = joinList(Cfg.ProjectRoots);
     std::string Exclude = joinList(Cfg.Exclude);
     std::string Compat = joinList(Cfg.CompatibilityPaths);
@@ -108,7 +109,7 @@ int runLint(const std::string &Tidy, const std::string &Plugin,
         "-checks=-*,green-hidden-control,green-transition-boundary,"
         "green-effect-boundary,green-pure-contract,green-cast-boundary,"
         "green-null,green-declaration,green-fallthrough,green-preprocessor,"
-        "green-toolchain-branching,green-outline,"
+        "green-toolchain-branching,green-flat,"
         "readability-braces-around-statements";
     int Status = EXIT_GREEN;
     for (const char *Std : {"c89", "c23"})
@@ -213,7 +214,7 @@ int main(int Argc, char **Argv)
 
     // Collect the set of files to process (whole DB if none specified).
     std::vector<std::string> Files;
-    if (Args.empty() || Cmd == "format" || Cmd == "fix" || Cmd == "outline")
+    if (Args.empty() || Cmd == "format" || Cmd == "fix")
     {
         for (const auto &E : GccEntries)
             Files.push_back(E.File);
@@ -246,11 +247,6 @@ int main(int Argc, char **Argv)
         int S = runLint(Tidy, GREEN_PLUGIN_PATH, CompileDBDir, TidyConfig,
                         Files, Fatal);
         return Fatal ? EXIT_UNAVAILABLE : S;
-    }
-    if (Cmd == "outline")
-    {
-        return runOutline(Tidy, GREEN_PLUGIN_PATH, GREEN_OUTLINE_PATH, Format,
-                          GREEN_FORMAT_PATH, CompileDBDir, TidyConfig, Files);
     }
     if (Cmd == "semantic")
     {
