@@ -51,3 +51,5 @@
 !tests/driver/sample/src/
 !tests/driver/sample/src/*.c
 !tests/driver/sample/*.yaml
+!tests/config/
+!tests/config/*.cc

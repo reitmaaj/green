@@ -12,4 +12,5 @@ exclude:
 
 compatibility_paths: []
 
-pure_functions: []
+pure_functions:
+    - strlen

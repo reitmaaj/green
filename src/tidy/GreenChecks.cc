@@ -293,6 +293,35 @@ static const Stmt *effectiveParent(const Stmt *N, ASTContext &Ctx)
     return Parents[0].get<Stmt>();
 }
 
+// A placement-transparent wrapper around an effect result: parentheses or an
+// implicit/explicit cast merely reinterpret its type. This transparency
+// implies no approval of an explicit cast; green-cast-boundary alone judges
+// cast admissibility. Value/unary operations that compute from or consume the
+// result are NOT transparent.
+static bool isTransparentEffectWrapper(const Stmt *N)
+{
+    return isa<ParenExpr>(N) || isa<ImplicitCastExpr>(N) ||
+           isa<ExprWithCleanups>(N) || isa<ConstantExpr>(N) ||
+           isa<CStyleCastExpr>(N);
+}
+
+// The outermost placement-transparent expression that still names the same
+// effect result: the call plus any enclosing parens/implicit-explicit casts.
+// Placement analysis then operates on this outer node, so that
+// `p = allocate();` (where allocate returns void * and Clang inserts an
+// implicit void * -> struct foo * conversion) is a valid result binding.
+static const Stmt *outerTransparentEffect(const Stmt *Call, ASTContext &Ctx)
+{
+    const Stmt *Cur = Call;
+    for (;;)
+    {
+        const Stmt *Next = effectiveParent(Cur, Ctx);
+        if (!Next || !isTransparentEffectWrapper(Next))
+            return Cur;
+        Cur = Next;
+    }
+}
+
 // True when the node forms a complete transition: it is an entire statement,
 // an entire branch/body of a selection/iteration statement, or an entire
 // for-clause (init or inc). This AST fork folds expression statements, so the
@@ -317,6 +346,33 @@ static bool isCompleteStatement(const Stmt *Node, ASTContext &Ctx)
         return N == CS->getSubStmt();
     if (const auto *DS = dyn_cast<DefaultStmt>(P))
         return N == DS->getSubStmt();
+    return false;
+}
+
+// True when Node *itself* (without unwrapping transparent wrappers) forms an
+// entire statement or a complete for-clause. Used on the outermost
+// placement-transparent expression so that a wrapped call that is the whole
+// statement - e.g. `(f());` - counts as a complete transition, while a call
+// buried inside a larger expression still does not.
+static bool isWholeStatement(const Stmt *Node, ASTContext &Ctx)
+{
+    const Stmt *P = effectiveParent(Node, Ctx);
+    if (!P)
+        return false;
+    if (isa<CompoundStmt>(P) || isa<LabelStmt>(P))
+        return true;
+    if (const auto *F = dyn_cast<ForStmt>(P))
+        return Node == F->getInit() || Node == F->getInc();
+    if (const auto *If = dyn_cast<IfStmt>(P))
+        return Node == If->getThen() || Node == If->getElse();
+    if (const auto *Wh = dyn_cast<WhileStmt>(P))
+        return Node == Wh->getBody();
+    if (const auto *Do = dyn_cast<DoStmt>(P))
+        return Node == Do->getBody();
+    if (const auto *CS = dyn_cast<CaseStmt>(P))
+        return Node == CS->getSubStmt();
+    if (const auto *DS = dyn_cast<DefaultStmt>(P))
+        return Node == DS->getSubStmt();
     return false;
 }
 
@@ -501,22 +557,22 @@ void EffectBoundaryCheck::check(const MatchFinder::MatchResult &Result)
     if (!Call)
         return;
     const FunctionDecl *FD = Call->getDirectCallee();
-    if (!FD)
-        return; // indirect calls are out of V1 scope
-    llvm::StringRef Name = FD->getName();
-    if (Pure.isPure(Name))
-        return;
+    if (FD && Pure.isPure(FD->getName()))
+        return; // proven pure; belongs to the term language
+    // An indirect call (no direct callee) is conservatively effectful: it is
+    // never proven pure and must obey the same transition discipline.
     SourceLocation Loc = Call->getBeginLoc();
     if (!Owned.isOwned(Loc, *Result.SourceManager))
         return;
-    const Stmt *Raw = stripWrappers(Call);
-    if (isCompleteStatement(Raw, *Result.Context))
+    // Placement-transparent result: the call plus any wrapping parens/casts.
+    const Stmt *ResultExpr = outerTransparentEffect(Call, *Result.Context);
+    if (isWholeStatement(ResultExpr, *Result.Context))
         return; // complete transition or for init/inc clause
     // effect call with result binding: sole RHS of a complete assignment
     if (const auto *BO = dyn_cast_or_null<BinaryOperator>(
-            effectiveParent(Raw, *Result.Context)))
+            effectiveParent(ResultExpr, *Result.Context)))
     {
-        if (BO->isAssignmentOp() && BO->getRHS() == Raw &&
+        if (BO->isAssignmentOp() && BO->getRHS() == ResultExpr &&
             isCompleteStatement(BO, *Result.Context))
             return;
     }

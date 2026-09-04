@@ -143,6 +143,20 @@ rule. They are loaded as the `green-tidy` plugin into `clang-tidy`.
 `readability-braces-around-statements` (with `ShortStatementLines = 0`) is
 reused for mandatory braces.
 
+> **Two kinds of explicitness.** Green enforces explicitness at two
+> independent axes. **Expression transparency** keeps effects, mutation,
+> sequencing, and value-dependent control from hiding inside expressions
+> (`green-hidden-control`, `green-transition-boundary`,
+> `green-effect-boundary`). **Structural transparency** gives every
+> nontrivial computation reached through control flow a named function
+> boundary (`green-flat`). A value category ladder captures this: TERM
+> (ordinary value), TRANSITION (explicit mutation), EFFECT (explicit
+> call/binding boundary), CONTROL (explicit braced control), WORKER (named
+> unit with substantive computation), and CONTROLLER REGION (nested block with
+> only thin orchestration). This explains why Green-produced code reads unlike
+> idiomatic C: it deliberately exchanges local concision for explicit semantic
+> and test boundaries.
+
 > V1 provides **no inline `NOLINT` escape**. Every owned location is subject
 > to the checks; if a check is wrong for your code the fix is to change the
 > code or the ownership configuration, not to suppress one location.
@@ -180,9 +194,32 @@ transition: a standalone discarded statement, or the sole right-hand side of
 an assignment (a result binding). An effect may not be buried inside a larger
 expression.
 
-- PASS: `consume(x);` alone; `r = produce();` (result binding).
+Parentheses and implicit or explicit casts are **placement-transparent**
+wrappers around a call: an assignment whose right-hand side is the call plus
+any wrapping parens/casts is still a valid result binding. This transparency
+implies no approval of an explicit cast — cast admissibility is judged solely
+by `green-cast-boundary` (see below). An **indirect** call (through a
+function pointer) is conservatively effectful and obeys the same rule.
+
+The complete-transition test is measured on the **outermost** expression, so a
+transparently-wrapped call that forms an *entire* statement or clause — a
+parenthesized `(f());`, an explicit `(void)f();` discard, or an effectful call
+as a `for` increment — is a complete transition, while the same wrapper does
+not help once the call feeds a larger computation.
+
+- PASS: `consume(x);` alone; `r = produce();` (result binding);
+  `p = allocate();` where `allocate` returns `void *` (Clang inserts an
+  implicit `void * -> struct foo *` conversion) or
+  `p = (struct foo *)allocate();`; `(void)produce();`; `(produce());`;
+  `for (...; ...; step())` (effectful increment).
 - FAIL: `n = produce() + 1;`, `consume(produce());`, `if (produce()) {}`,
-  `return produce();`.
+  `return produce();`, an effectful call in a `while`/`do`/`for` condition,
+  and consuming or computing from a wrapped result —
+  `x = -produce();`, `x = *produce();`, `x = produce()[0];`,
+  `x = (f()) + 1;`.
+- An effect-placement diagnostic is never produced merely because a cast chain
+  contains a representation escape (e.g. through `uintptr_t`); only the bad
+  cast is reported.
 
 ### `green-pure-contract`
 
@@ -200,11 +237,20 @@ call, no volatile access, and no other unproven (not themselves pure) call.
 own token line immediately before a function, plus any names in the
 `pure_functions` list.
 
+A `GREEN_PURE` marker on a *prototype* (a declaration without a body) asserts
+purity of an external function, so calls to it are usable in expression
+position; like `pure_functions`, this is unvalidated trust (there is no body
+to check), whereas a marked *definition* is validated by this check.
+
 ### `green-cast-boundary`
 
 Casts are allowed when they mark a real, intentional domain or width
 boundary; they are rejected when they are redundant or discard type
 information.
+
+A cast (implicit or explicit) around an effect result is *placement
+transparent* for `green-effect-boundary`; whether that cast is admissible is
+decided **here**, and only here.
 
 - PASS: intentional narrowing/signedness/domain casts, e.g. guarded
   `(unsigned int)size`, `(unsigned char)value`, `(long)int_value`.
@@ -277,16 +323,20 @@ the one source is genuinely accepted by both GCC and Clang.
 
 ### `green-flat`
 
-Inline work is welcome at a function's **top level** — its own straight-line
-flow may compute freely. It is the smell only when it sits inside a **nested**
-block: an `if`/`else` body, a loop body, a `switch`/`case` body, or an
-explicit bare `{}` block.
+`green-flat` is a **structural decomposition / test-boundary discipline**:
+every nontrivial computation reached through control flow should acquire a
+named function boundary so it is independently callable, testable, and
+analyzable. Inline work is welcome at a function's **top level** — its own
+straight-line flow may compute freely. It is the smell only when it sits
+inside a **nested** block: an `if`/`else` body, a loop body, a
+`switch`/`case` body, or an explicit bare `{}` block.
 
 Every nested block must be **thin**: no inline computation, and at most **one
 glue statement per straight-line run**. A *glue* statement is a discarded
 call, a prefix `++`/`--`, a constant init/assignment, or a call-result
 binding. Real work inside a decision/iteration region belongs in a *worker
-function* the code calls.
+function* the code calls — nested control blocks orchestrate; worker
+functions compute.
 
 - PASS: top-level computation; a pure straight-line worker with no nested
   block; a control body that holds a single glue statement (`step();`,
@@ -306,7 +356,9 @@ function* the code calls.
 > body, a loop body, a `switch`/`case` body, or an explicit bare `{}` block —
 > real computation is the smell: it should live in a worker function the code
 > calls, so each decision/iteration site stays a single thin delegation. This
-> keeps controllers and workers independently readable and testable.
+> keeps controllers and workers independently readable and testable. A loop
+> body that reduces to a single delegation (e.g. `hm_i_collect_free(...)`) is
+> a successful Green transformation.
 
 ### Reused: `readability-braces-around-statements`
 
@@ -441,10 +493,18 @@ A documented template is installed at `share/green/default-config.yaml`.
   there).
 - `pure_functions` — list of function names treated as pure for
   `green-effect-boundary` / `green-pure-contract` purposes, in addition to
-  the `GREEN_PURE` marker.
+  the `GREEN_PURE` marker. The driver serializes this list into every check's
+  options, so it must reach the checks that consume it.
 
-Unknown keys, a missing `version`, an unsupported `version`, or missing
-`compile_commands.gcc`/`clang` entries are **configuration errors** (exit
+Each of `project_roots`, `exclude`, `compatibility_paths`, and
+`pure_functions` is a **block list**: it is opened by its own top-level
+header key and populated by the indented `- item` lines beneath it (or by an
+inline `[...]` form such as `pure_functions: []`). A subsequent header starts
+a new list; it does not invalidate or swallow its predecessor.
+
+Unknown keys, a missing `version`, an unsupported `version`, missing
+`compile_commands.gcc`/`clang` entries, or an **orphaned** `- item` line that
+appears with no active block-list header are **configuration errors** (exit
 status 2).
 
 > The schema is intentionally small and fixed. The sample project in

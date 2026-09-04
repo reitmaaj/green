@@ -162,6 +162,12 @@ class TransitionBoundaryCheck : public ClangTidyCheck
 };
 
 // green-effect-boundary ------------------------------------------------------
+// An effectful call (one not proven pure) must form a complete transition: a
+// standalone discarded statement, or the sole right-hand side of an
+// assignment. Parentheses and implicit or explicit casts are
+// placement-transparent wrappers around a call; computing from or consuming
+// the wrapped result is still rejected. Cast admissibility is judged solely by
+// green-cast-boundary. An indirect call is conservatively effectful.
 class EffectBoundaryCheck : public ClangTidyCheck
 {
   public:
@@ -299,13 +305,16 @@ class ToolchainBranchingCheck : public ClangTidyCheck
 };
 
 // green-flat -----------------------------------------------------------------
-// Inline work is welcome at a function's top level (its own straight-line
-// flow). It is the smell only when it sits inside a *nested* block - an
-// if/else body, a loop body, a switch/case body, or an explicit bare {} block.
-// Every nested block must be thin: no inline computation, and at most one glue
-// statement (a discarded call, a prefix update, a constant init/assignment, or
-// a call-result binding) per straight-line run. Real work inside a decision or
-// iteration region belongs in a worker function the code calls.
+// Structural decomposition / test-boundary discipline: every nontrivial
+// computation reached through control flow should acquire a named function
+// boundary so it is independently callable, testable, and analyzable. Inline
+// work is welcome at a function's top level (its own straight-line flow). It
+// is the smell only when it sits inside a *nested* block - an if/else body, a
+// loop body, a switch/case body, or an explicit bare {} block. Every nested
+// block must be thin: no inline computation, and at most one glue statement (a
+// discarded call, a prefix update, a constant init/assignment, or a
+// call-result binding) per straight-line run. Nested control blocks
+// orchestrate; worker functions compute.
 class FlatCheck : public ClangTidyCheck
 {
   public:

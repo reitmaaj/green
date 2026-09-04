@@ -24,8 +24,31 @@ execution.
 ## green-effect-boundary
 
 - PASS: effect call alone as a statement; effect call as the sole right-hand
-  side of an assignment (result binding).
-- FAIL: `n = f() + 1; consume(f()); if (f()) {} return f();`.
+  side of an assignment (result binding); an effectful call as a `for`
+  increment clause (`for (...; ...; step())`); an explicit `(void)f();`
+  discarded statement.
+- PASS: the bound effect result may pass through parentheses or any implicit
+  or explicit cast wrapper, e.g. `p = allocate();` where `allocate` returns
+  `void *` (Clang inserts an implicit `void * -> struct node *`), or
+  `p = (struct node *)allocate();`. The wrapper is placement-transparent only:
+  `green-effect-boundary` reports nothing and cast admissibility is judged
+  solely by `green-cast-boundary`.
+- FAIL: `n = f() + 1; consume(f()); if (f()) {} return f();`; an effectful
+  call in a `while`/`do`/`for` *condition*.
+- FAIL: consuming or computing from a transparently-wrapped effect result
+  (`x = -f();`, `x = *f();`, `x = f()[0];`, `x = (int)f() + 0;`,
+  `x = (f()) + 1;`).
+- PASS: a transparently-wrapped effect that forms an *entire statement*
+  (`(f());`) is a complete discarded statement; the complete-transition test is
+  measured on the outermost expression.
+- FAIL: an indirect call (through a function pointer) is conservatively
+  effectful, so `x = (*fp)(a) + 1; if ((*fp)(a)) {} return (*fp)(a);`
+  fail while `(*fp)(a);` and `x = (*fp)(a);` pass.
+- PASS: a function listed in the `pure_functions` config is treated as pure
+  when the driver serializes the list into the check's options.
+- PASS: a `GREEN_PURE`-marked *prototype* asserts purity of an external
+  function, so calls to it are usable in expression position (unvalidated
+  trust, like `pure_functions`).
 
 ## green-pure-contract
 
@@ -114,6 +137,11 @@ execution.
   use empty blocks, never null statements; `else if` remains a chain.
 
 ## green-flat
+
+Rationale: structural decomposition / test-boundary discipline. Nested control
+blocks orchestrate (thin delegation); worker functions compute. A loop body
+that reduces to a single delegation (`hm_i_collect_free(...)`) is a successful
+Green transformation.
 
 - PASS: the function's own top level computes freely; a straight-line pure
   worker with no nested block is flat by construction.

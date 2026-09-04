@@ -14,3 +14,14 @@ set_tests_properties(smoke-version PROPERTIES LABELS "unit")
 add_test(NAME doctor
          COMMAND $<TARGET_FILE:green> doctor)
 set_tests_properties(doctor PROPERTIES LABELS "unit")
+
+# Config parser unit test.
+add_executable(green-config-test
+    config/ConfigTest.cc
+    ../src/driver/Config.cc)
+target_include_directories(green-config-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(green-config-test PRIVATE ${GREEN_CLANG_LIBS})
+add_test(NAME config
+         COMMAND $<TARGET_FILE:green-config-test>)
+set_tests_properties(config PROPERTIES LABELS "unit")
