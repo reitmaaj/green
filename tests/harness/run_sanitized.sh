@@ -10,7 +10,7 @@ SAN_BUILD="$ROOT/.agent/tmp/build-sanitize"
 GREEN="$SAN_BUILD/green"
 PLUGIN="$SAN_BUILD/libgreen-tidy.so"
 TIDY=$(command -v clang-tidy)
-CHECKS="-checks=-*,green-hidden-control,green-transition-boundary,green-effect-boundary,green-pure-contract,green-cast-boundary,green-null,green-declaration,green-fallthrough,green-preprocessor,green-toolchain-branching,green-flat,readability-braces-around-statements"
+CHECKS="-checks=-*,green-hidden-control,green-transition-boundary,green-effect-boundary,green-pure-contract,green-cast-boundary,green-null,green-declaration,green-fallthrough,green-preprocessor,green-toolchain-branching,green-flat,green-reserved-suffix,readability-braces-around-statements"
 
 export UBSAN_OPTIONS=halt_on_error=1
 

@@ -833,6 +833,64 @@ void NullCheck::check(const MatchFinder::MatchResult &Result)
     diag(Loc, "use NULL for a null pointer constant", DiagnosticIDs::Error);
 }
 
+// -- ReservedSuffixCheck -----------------------------------------------------
+
+static bool isReservedSuffix(llvm::StringRef Name)
+{
+    return Name.size() > 2 && Name.ends_with("_t");
+}
+
+void ReservedSuffixCheck::registerMatchers(MatchFinder *Finder)
+{
+    Finder->addMatcher(typedefDecl().bind("typedef"), this);
+    Finder->addMatcher(recordDecl().bind("tag"), this);
+    Finder->addMatcher(enumDecl().bind("tag"), this);
+}
+
+void ReservedSuffixCheck::check(const MatchFinder::MatchResult &Result)
+{
+    Owned.configure(*Result.SourceManager);
+    llvm::StringRef Compatibility = Options.get("CompatibilityPaths", "");
+    llvm::StringRef Name;
+    SourceLocation Loc;
+    bool Defined = false;
+
+    if (const auto *TD = Result.Nodes.getNodeAs<TypedefDecl>("typedef"))
+    {
+        Name = TD->getName();
+        Loc = TD->getLocation();
+        Defined = true;
+    }
+    else if (const auto *RD = Result.Nodes.getNodeAs<RecordDecl>("tag"))
+    {
+        if (!RD->isThisDeclarationADefinition() || !RD->getIdentifier())
+            return;
+        Name = RD->getName();
+        Loc = RD->getLocation();
+        Defined = true;
+    }
+    else if (const auto *ED = Result.Nodes.getNodeAs<EnumDecl>("tag"))
+    {
+        if (!ED->isThisDeclarationADefinition() || !ED->getIdentifier())
+            return;
+        Name = ED->getName();
+        Loc = ED->getLocation();
+        Defined = true;
+    }
+
+    if (!Defined || Name.empty() || !isReservedSuffix(Name))
+        return;
+    if (Reported.count(Name))
+        return; // one report per reserved name per translation unit
+    if (!Owned.isOwned(Loc, *Result.SourceManager))
+        return;
+    if (isCompatibilityPath(Loc, *Result.SourceManager, Compatibility))
+        return;
+    Reported.insert(Name);
+    diag(Loc, "type name ends with the reserved '_t' suffix",
+         DiagnosticIDs::Error);
+}
+
 // -- DeclarationCheck --------------------------------------------------------
 
 void DeclarationCheck::registerMatchers(MatchFinder *Finder)
