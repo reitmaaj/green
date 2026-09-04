@@ -69,17 +69,13 @@ std::string joinList(const std::vector<std::string> &V)
 // so the options are repeated across every green-* check.
 std::string buildTidyConfig(const Config &Cfg)
 {
-    static const char *Checks[] = {"green-hidden-control",
-                                   "green-transition-boundary",
-                                   "green-effect-boundary",
-                                   "green-pure-contract",
-                                   "green-cast-boundary",
-                                   "green-null",
-                                   "green-declaration",
-                                   "green-fallthrough",
-                                   "green-preprocessor",
-                                   "green-toolchain-branching",
-                                   "green-flat"};
+    static const char *Checks[] = {
+        "green-hidden-control",      "green-transition-boundary",
+        "green-effect-boundary",     "green-pure-contract",
+        "green-cast-boundary",       "green-null",
+        "green-reserved-suffix",     "green-declaration",
+        "green-fallthrough",         "green-preprocessor",
+        "green-toolchain-branching", "green-flat"};
     std::string Roots = joinList(Cfg.ProjectRoots);
     std::string Exclude = joinList(Cfg.Exclude);
     std::string Compat = joinList(Cfg.CompatibilityPaths);
@@ -110,6 +106,7 @@ int runLint(const std::string &Tidy, const std::string &Plugin,
         "green-effect-boundary,green-pure-contract,green-cast-boundary,"
         "green-null,green-declaration,green-fallthrough,green-preprocessor,"
         "green-toolchain-branching,green-flat,"
+        "green-reserved-suffix,"
         "readability-braces-around-statements";
     int Status = EXIT_GREEN;
     for (const char *Std : {"c89", "c23"})

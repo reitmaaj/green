@@ -123,7 +123,7 @@ plus this baseline (see [Compilation database normalization](#compile-database-n
 
 ## Semantic checks
 
-Eleven `green-*` checks plus one reused built-in check implement the semantic
+Twelve `green-*` checks plus one reused built-in check implement the semantic
 rule. They are loaded as the `green-tidy` plugin into `clang-tidy`.
 
 | Check | Rule (short) |
@@ -135,6 +135,7 @@ rule. They are loaded as the `green-tidy` plugin into `clang-tidy`.
 | `green-cast-boundary` | reject redundant, qualifier-discarding, integer/pointer and object/function-pointer casts; object-pointer conversions (incl. `void *`) allowed |
 | `green-null` | `NULL` is the canonical null-pointer spelling |
 | `green-declaration` | one object per declaration; prototype forms; `(void)` |
+| `green-reserved-suffix` | an owned type name must not end in the reserved `_t` suffix |
 | `green-fallthrough` | no implicit fallthrough; exact `/* fall through */` marker |
 | `green-preprocessor` | no function-like / token-manipulation macros; object-like macros may not hide control/transition at expansion |
 | `green-toolchain-branching` | no compiler-identity conditionals |
@@ -359,6 +360,29 @@ functions compute.
 > keeps controllers and workers independently readable and testable. A loop
 > body that reduces to a single delegation (e.g. `hm_i_collect_free(...)`) is
 > a successful Green transformation.
+
+### `green-reserved-suffix`
+
+The C standard reserves leading underscores for the implementation, and POSIX
+reserves the `_t` suffix for the implementation's own types. A type the
+project authors whose name ends in `_t` risks colliding with a current or
+future system type once the two are combined in one program.
+
+- FAIL: an owned **typedef name** ending in `_t` —
+  `typedef struct node node_t;`, `typedef unsigned long count_t;`.
+- FAIL: an owned **struct/union/enum tag** ending in `_t` —
+  `struct point_t { ... };`, `enum color_t { ... };`.
+- The `typedef struct node_t { ... } node_t;` idiom reports the reserved name
+  exactly once (for the tag and its alias together).
+- PASS: an owned type whose name does not end in `_t`
+  (`typedef struct node Node;`).
+- PASS: a system/library type that is only *used* in owned code (`size_t`,
+  `time_t`, `int32_t`, `FILE`). Its definition lives in a file the project
+  does not own, so it is never reported.
+- Applies only to owned **definitions**; ownership and
+  `compatibility_paths`/`exclude` decide exemption (see
+  [Ownership](#ownership)). The rule does not depend on angle-vs-quoted
+  include classification.
 
 ### Reused: `readability-braces-around-statements`
 

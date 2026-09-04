@@ -160,3 +160,30 @@ Green transformation.
 - Note: a `switch` case body is inspected only when the case forms its own
   nested `{}` block; unbraced case statements are not inline-scanned by the
   current check (see `flat-008`, `flat-017`, `flat-020`).
+
+## green-reserved-suffix
+
+Rationale: the C standard reserves leading underscores for the implementation
+and POSIX reserves the `_t` suffix for the implementation's own types. A type
+name the project authors that ends in `_t` risks colliding with a current or
+future system type. The check judges **definitions** the project owns, never
+mere uses.
+
+- FAIL: an owned `typedef` name ending in `_t`, e.g.
+  `typedef struct node node_t;`, `typedef unsigned long count_t;`.
+- FAIL: an owned struct/union/enum **tag** ending in `_t`, e.g.
+  `struct point_t { ... };`, `enum color_t { ... };`.
+- PASS (single report): the idiom `typedef struct node_t { ... } node_t;`
+  reports the reserved name exactly once, not for both the tag and the alias.
+- PASS: an owned type whose name does not end in `_t`
+  (`typedef struct node Node;`, `struct point { ... };`).
+- PASS: a system/library type that is only *used* in owned code
+  (`size_t`, `time_t`, `int32_t`, `FILE`); its definition lives in a header
+  the project does not own.
+- PASS: definitions in non-owned files (system headers, `<lib.h>` libraries,
+  vendored headers under `exclude`).
+- PASS: an owned definition under `compatibility_paths` (an interop shim may
+  mirror a platform's exact spelling).
+- Note: suffix means the identifier's final two characters are `_t`; a name
+  of length two (`_t` alone) is not a reasonable authored type and is not
+  reported.

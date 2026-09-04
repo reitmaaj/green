@@ -236,6 +236,29 @@ class NullCheck : public ClangTidyCheck
     Ownership Owned;
 };
 
+// green-reserved-suffix -------------------------------------------------------
+// The C standard reserves leading underscores for the implementation and POSIX
+// reserves the `_t` suffix for the implementation's own types. Reject the `_t`
+// suffix on type names the project itself defines (typedef names and
+// struct/union/enum tags). Only owned *definitions* are judged; a system type
+// that is merely used is declared in a file the project does not own and is
+// never reported. Owned files under compatibility_paths are exempt.
+class ReservedSuffixCheck : public ClangTidyCheck
+{
+  public:
+    ReservedSuffixCheck(llvm::StringRef Name, ClangTidyContext *Context)
+        : ClangTidyCheck(Name, Context),
+          Owned(Options.get("ProjectRoots", ""), Options.get("Exclude", ""))
+    {
+    }
+    void registerMatchers(ast_matchers::MatchFinder *Finder) override;
+    void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
+
+  private:
+    Ownership Owned;
+    llvm::StringSet<> Reported;
+};
+
 // green-declaration ----------------------------------------------------------
 class DeclarationCheck : public ClangTidyCheck
 {

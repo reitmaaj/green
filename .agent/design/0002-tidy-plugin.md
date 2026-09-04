@@ -17,6 +17,7 @@ green-cast-boundary         numeric/qualifier/representation cast policy (object
                             conversions allowed)
 green-null                  NULL spelling, source-vs-expansion
 green-declaration           one declarator per declaration; prototypes; (void)
+green-reserved-suffix       no owned type name ending in the reserved _t suffix
 green-fallthrough           implicit rejected; exact /* fall through */ marker
 green-preprocessor          function-like macros, pasting/stringify, macro-generated
                             control/transition via expansion-site attribution

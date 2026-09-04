@@ -20,6 +20,7 @@ class GreenModule : public ClangTidyModule
         Factories.registerCheck<PureContractCheck>("green-pure-contract");
         Factories.registerCheck<CastBoundaryCheck>("green-cast-boundary");
         Factories.registerCheck<NullCheck>("green-null");
+        Factories.registerCheck<ReservedSuffixCheck>("green-reserved-suffix");
         Factories.registerCheck<DeclarationCheck>("green-declaration");
         Factories.registerCheck<FallthroughCheck>("green-fallthrough");
         Factories.registerCheck<PreprocessorCheck>("green-preprocessor");
