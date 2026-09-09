@@ -131,10 +131,13 @@ execution.
 - PASS: such tests inside `compatibility_paths`; system/third-party headers
   are exempt.
 
-## Reused built-in: readability-braces-around-statements
+## green-braces
 
 - Every controlled body (`if/else/while/do/for`) uses braces; empty bodies
   use empty blocks, never null statements; `else if` remains a chain.
+- Implemented as an owned `green-*` check (not the reused built-in) so the
+  diagnostics carry the WHY/CONTEXT/FIX guidance and offer the mechanical
+  brace fix-its used by `green fix`.
 
 ## green-flat
 

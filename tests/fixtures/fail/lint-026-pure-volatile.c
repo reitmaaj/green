@@ -1,4 +1,4 @@
-/* green: lint=green-pure-contract */
+/* green: lint=green-pure-contract msg="a volatile access" */
 
 #define GREEN_PURE
 

@@ -1,4 +1,4 @@
-/* green: lint=green-preprocessor */
+/* green: lint=green-preprocessor msg="function-like macros are forbidden" */
 
 #define CAT(a, b) a##b
 

@@ -25,3 +25,14 @@ target_link_libraries(green-config-test PRIVATE ${GREEN_CLANG_LIBS})
 add_test(NAME config
          COMMAND $<TARGET_FILE:green-config-test>)
 set_tests_properties(config PROPERTIES LABELS "unit")
+
+# Informative-diagnostic message builder unit test (no Clang dependency).
+add_executable(green-message-test
+    messages/GreenMessagesTest.cc
+    ../src/tidy/GreenMessages.cc
+    ../src/driver/Guide.cc)
+target_include_directories(green-message-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+add_test(NAME messages
+         COMMAND $<TARGET_FILE:green-message-test>)
+set_tests_properties(messages PROPERTIES LABELS "unit")

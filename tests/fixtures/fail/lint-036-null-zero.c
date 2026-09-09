@@ -1,4 +1,4 @@
-/* green: lint=green-null */
+/* green: lint=green-null msg="use NULL for a null pointer constant" msg="stddef.h" */
 
 struct node
 {

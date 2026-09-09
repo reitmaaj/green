@@ -1,4 +1,4 @@
-/* green: lint=green-reserved-suffix */
+/* green: lint=green-reserved-suffix msg="struct/union tag" */
 
 struct point_t
 {

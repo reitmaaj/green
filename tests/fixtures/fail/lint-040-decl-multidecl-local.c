@@ -1,4 +1,4 @@
-/* green: lint=green-declaration */
+/* green: lint=green-declaration msg="one declaration must declare exactly one object" */
 
 int f(void)
 {

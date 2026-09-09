@@ -1,5 +1,6 @@
 // green-tidy plugin checks.
 #include "GreenChecks.h"
+#include "GreenMessages.h"
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
@@ -305,6 +306,20 @@ static bool isTransparentEffectWrapper(const Stmt *N)
            isa<CStyleCastExpr>(N);
 }
 
+// Source text of a statement/expression, collapsed onto one line for message
+// CONTEXT sections. Empty when the range has no textual source.
+static std::string stmtText(const Stmt *S, const SourceManager &SM,
+                            const LangOptions &LO)
+{
+    if (!S || !S->getSourceRange().isValid())
+        return "";
+    CharSourceRange CSR = CharSourceRange::getTokenRange(S->getSourceRange());
+    StringRef Text = Lexer::getSourceText(CSR, SM, LO);
+    if (Text.empty())
+        return "";
+    return msg::cleanSnippet(Text.str());
+}
+
 // The outermost placement-transparent expression that still names the same
 // effect result: the call plus any enclosing parens/implicit-explicit casts.
 // Placement analysis then operates on this outer node, so that
@@ -374,6 +389,29 @@ static bool isWholeStatement(const Stmt *Node, ASTContext &Ctx)
     if (const auto *DS = dyn_cast<DefaultStmt>(P))
         return Node == DS->getSubStmt();
     return false;
+}
+
+// Describe how a mis-placed effect result is consumed, for the message
+// CONTEXT section. Returns "" when the consumer shape is not categorized.
+static std::string placementPhrase(const Stmt *Node, ASTContext &Ctx)
+{
+    const Stmt *P = effectiveParent(Node, Ctx);
+    if (!P)
+        return "";
+    if (isa<CallExpr>(P))
+        return "an argument of another call";
+    if (isa<ArraySubscriptExpr>(P))
+        return "an array subscript";
+    if (isa<ReturnStmt>(P))
+        return "an operand of a return statement";
+    if (isa<IfStmt>(P) || isa<WhileStmt>(P) || isa<DoStmt>(P) ||
+        isa<ForStmt>(P))
+        return "a condition";
+    if (isa<Expr>(P))
+        return "an operand of an operator expression";
+    if (isa<DeclStmt>(P))
+        return "a declaration initializer";
+    return "";
 }
 
 // -- HiddenControlCheck ------------------------------------------------------
@@ -446,8 +484,7 @@ void HiddenControlCheck::check(const MatchFinder::MatchResult &Result)
         llvm::StringRef Sym = Op->getOpcodeStr();
         if (Op->getOpcode() == BO_Comma)
             Sym = ",";
-        diag(Loc, "hidden control operator '" + std::string(Sym) + "'",
-             DiagnosticIDs::Error);
+        diag(Loc, msg::hiddenControlOperator(Sym.str()), DiagnosticIDs::Error);
     }
     if (const auto *Cond = Result.Nodes.getNodeAs<ConditionalOperator>("cond"))
     {
@@ -457,7 +494,7 @@ void HiddenControlCheck::check(const MatchFinder::MatchResult &Result)
         SourceLocation UseSite = SM.getExpansionRange(Loc).getBegin();
         if (!Owned.isOwned(UseSite, SM))
             return;
-        diag(Loc, "hidden control operator '?:'", DiagnosticIDs::Error);
+        diag(Loc, msg::hiddenControlTernary(), DiagnosticIDs::Error);
     }
 }
 
@@ -501,8 +538,7 @@ void TransitionBoundaryCheck::check(const MatchFinder::MatchResult &Result)
         if (!Owned.isOwned(UseSite, SM))
             return;
         if (!isCompleteStatement(Op, Ctx))
-            diag(Loc, "assignment must form a complete transition",
-                 DiagnosticIDs::Error);
+            diag(Loc, msg::transitionAssignment(), DiagnosticIDs::Error);
     }
     if (const auto *Op = Result.Nodes.getNodeAs<UnaryOperator>("update"))
     {
@@ -514,11 +550,12 @@ void TransitionBoundaryCheck::check(const MatchFinder::MatchResult &Result)
         if (!Owned.isOwned(UseSite, SM))
             return;
         if (Op->isPostfix())
-            diag(Loc, "postfix update is not accepted; use the prefix form",
-                 DiagnosticIDs::Error);
+        {
+            std::string Sym = Op->getOpcode() == UO_PostInc ? "++" : "--";
+            diag(Loc, msg::transitionPostfix(Sym), DiagnosticIDs::Error);
+        }
         else if (!isCompleteStatement(Op, Ctx))
-            diag(Loc, "update must form a complete transition",
-                 DiagnosticIDs::Error);
+            diag(Loc, msg::transitionEmbeddedUpdate(), DiagnosticIDs::Error);
     }
 }
 
@@ -576,7 +613,9 @@ void EffectBoundaryCheck::check(const MatchFinder::MatchResult &Result)
             isCompleteStatement(BO, *Result.Context))
             return;
     }
-    diag(Loc, "effectful call must form a complete transition",
+    diag(Loc,
+         msg::effectCall(FD == nullptr, FD ? FD->getName().str() : "",
+                         placementPhrase(ResultExpr, *Result.Context)),
          DiagnosticIDs::Error);
 }
 
@@ -627,55 +666,84 @@ static bool isExternallyVisibleLvalue(const Expr *E)
     return true;
 }
 
+// Collects per-reason evidence for a false GREEN_PURE annotation: the
+// offending statements with their source lines, so the diagnostic can point
+// the fixer at the exact body content.
 class EffectFinder : public RecursiveASTVisitor<EffectFinder>
 {
   public:
-    bool HasMutation = false;
-    bool HasEffect = false;
-    bool HasVolatile = false;
     PureRegistry *Pure = nullptr;
+    const SourceManager *SM = nullptr;
+    const LangOptions *LO = nullptr;
+    std::vector<std::string> Mutations;
+    std::vector<std::string> Effects;
+    std::vector<std::string> Volatiles;
 
+  private:
+    static constexpr unsigned MaxEvidence = 3;
+    void record(std::vector<std::string> &Out, const Stmt *S)
+    {
+        if (Out.size() >= MaxEvidence || !SM)
+            return;
+        std::string Text = stmtText(S, *SM, *LO);
+        if (Text.empty())
+            return;
+        unsigned Line = SM->getSpellingLineNumber(S->getBeginLoc());
+        Out.push_back("at line " + std::to_string(Line) + ": '" + Text + "'");
+    }
+
+  public:
     bool VisitBinaryOperator(BinaryOperator *BO)
     {
         if (BO->isAssignmentOp() && isExternallyVisibleLvalue(BO->getLHS()))
-            HasMutation = true;
+            record(Mutations, BO);
         return true;
     }
     bool VisitUnaryOperator(UnaryOperator *UO)
     {
         if (UO->isIncrementDecrementOp() &&
             isExternallyVisibleLvalue(UO->getSubExpr()))
-            HasMutation = true;
+            record(Mutations, UO);
         if (UO->getOpcode() == UO_Deref && UO->getType().isVolatileQualified())
-            HasVolatile = true;
+            record(Volatiles, UO);
         return true;
     }
     bool VisitMemberExpr(MemberExpr *ME)
     {
         if (ME->getType().isVolatileQualified())
-            HasVolatile = true;
+            record(Volatiles, ME);
         return true;
     }
     bool VisitCallExpr(CallExpr *CE)
     {
         const FunctionDecl *FD = CE->getDirectCallee();
-        if (!FD)
-        {
-            HasEffect = true;
-            return true;
-        }
-        if (!Pure->isPure(FD->getName()))
-            HasEffect = true;
+        if (!FD || !Pure->isPure(FD->getName()))
+            record(Effects, CE);
         return true;
     }
     bool VisitImplicitCastExpr(ImplicitCastExpr *IC)
     {
         if (IC->getCastKind() == CK_LValueToRValue &&
             IC->getSubExpr()->getType().isVolatileQualified())
-            HasVolatile = true;
+            record(Volatiles, IC);
         return true;
     }
 };
+} // namespace
+
+namespace
+{
+std::string joinEvidence(const std::vector<std::string> &V)
+{
+    std::string Out;
+    for (size_t i = 0; i < V.size(); ++i)
+    {
+        if (i)
+            Out += ", ";
+        Out += V[i];
+    }
+    return Out;
+}
 } // namespace
 
 void PureContractCheck::check(const MatchFinder::MatchResult &Result)
@@ -697,18 +765,25 @@ void PureContractCheck::check(const MatchFinder::MatchResult &Result)
     // Validate the marked definition is pure.
     EffectFinder Finder;
     Finder.Pure = &Pure;
+    Finder.SM = Result.SourceManager;
+    Finder.LO = &Result.Context->getLangOpts();
     Finder.TraverseStmt(FD->getBody());
-    if (Finder.HasMutation)
-        diag(FD->getLocation(),
-             "false PURE annotation: body contains an assignment or update",
+    SourceLocation Loc = FD->getLocation();
+    std::string Name = FD->getName().str();
+    if (!Finder.Mutations.empty())
+        diag(Loc,
+             msg::pureContract("an assignment or update", Name,
+                               joinEvidence(Finder.Mutations)),
              DiagnosticIDs::Error);
-    if (Finder.HasEffect)
-        diag(FD->getLocation(),
-             "false PURE annotation: body contains an effectful call",
+    if (!Finder.Effects.empty())
+        diag(Loc,
+             msg::pureContract("an effectful call", Name,
+                               joinEvidence(Finder.Effects)),
              DiagnosticIDs::Error);
-    if (Finder.HasVolatile)
-        diag(FD->getLocation(),
-             "false PURE annotation: body contains a volatile access",
+    if (!Finder.Volatiles.empty())
+        diag(Loc,
+             msg::pureContract("a volatile access", Name,
+                               joinEvidence(Finder.Volatiles)),
              DiagnosticIDs::Error);
 }
 
@@ -739,15 +814,13 @@ void CastBoundaryCheck::check(const MatchFinder::MatchResult &Result)
 
     if (Src == Dst)
     {
-        diag(Loc, "cast from a type to its same canonical type is redundant",
-             DiagnosticIDs::Error);
+        diag(Loc, msg::castRedundant(Dst.getAsString()), DiagnosticIDs::Error);
         return;
     }
     if (SrcU == DstU)
     {
         if (Src.isMoreQualifiedThan(Dst, *Result.Context))
-            diag(Loc, "cast discards const/volatile qualification",
-                 DiagnosticIDs::Error);
+            diag(Loc, msg::castDiscardsQualifiers(), DiagnosticIDs::Error);
         return; // adding qualification or nothing else to check
     }
 
@@ -764,7 +837,8 @@ void CastBoundaryCheck::check(const MatchFinder::MatchResult &Result)
     if ((SrcInt && DstPtr) || (SrcPtr && DstInt))
     {
         if (!SrcIsNullConst)
-            diag(Loc, "representation escape: integer/pointer cast",
+            diag(Loc,
+                 msg::castIntPointer(SrcU.getAsString(), DstU.getAsString()),
                  DiagnosticIDs::Error);
         return;
     }
@@ -780,7 +854,8 @@ void CastBoundaryCheck::check(const MatchFinder::MatchResult &Result)
         bool DPFn = DPP->isFunctionType();
         if (SPFn != DPFn)
         {
-            diag(Loc, "representation escape: object/function pointer cast",
+            diag(Loc,
+                 msg::castFnPointer(SrcU.getAsString(), DstU.getAsString()),
                  DiagnosticIDs::Error);
             return;
         }
@@ -792,8 +867,7 @@ void CastBoundaryCheck::check(const MatchFinder::MatchResult &Result)
         }
         if (SPP == DPP && SPPRaw.isMoreQualifiedThan(DPPRaw, *Result.Context))
         {
-            diag(Loc, "cast discards const/volatile qualification",
-                 DiagnosticIDs::Error);
+            diag(Loc, msg::castDiscardsQualifiers(), DiagnosticIDs::Error);
             return;
         }
         // Unrelated object-pointer conversions are allowed. Access through
@@ -830,7 +904,7 @@ void NullCheck::check(const MatchFinder::MatchResult &Result)
     Owned.configure(*Result.SourceManager);
     if (!Owned.isOwned(Loc, *Result.SourceManager))
         return;
-    diag(Loc, "use NULL for a null pointer constant", DiagnosticIDs::Error);
+    diag(Loc, msg::nullPointer(), DiagnosticIDs::Error);
 }
 
 // -- ReservedSuffixCheck -----------------------------------------------------
@@ -887,8 +961,14 @@ void ReservedSuffixCheck::check(const MatchFinder::MatchResult &Result)
     if (isCompatibilityPath(Loc, *Result.SourceManager, Compatibility))
         return;
     Reported.insert(Name);
-    diag(Loc, "type name ends with the reserved '_t' suffix",
-         DiagnosticIDs::Error);
+    std::string Kind = "type";
+    if (const auto *TD = Result.Nodes.getNodeAs<TypedefDecl>("typedef"))
+        Kind = "typedef name";
+    else if (const auto *RD = Result.Nodes.getNodeAs<RecordDecl>("tag"))
+        Kind = "struct/union tag";
+    else if (const auto *ED = Result.Nodes.getNodeAs<EnumDecl>("tag"))
+        Kind = "enum tag";
+    diag(Loc, msg::reservedSuffix(Name.str(), Kind), DiagnosticIDs::Error);
 }
 
 // -- DeclarationCheck --------------------------------------------------------
@@ -921,8 +1001,7 @@ void DeclarationCheck::check(const MatchFinder::MatchResult &Result)
     {
         if (Owned.isOwned(S->getBeginLoc(), *Result.SourceManager) &&
             isMultiDeclarator(S))
-            diag(S->getBeginLoc(),
-                 "one declaration must declare exactly one object",
+            diag(S->getBeginLoc(), msg::multiDeclaration(),
                  DiagnosticIDs::Error);
     }
     if (const auto *TU = Result.Nodes.getNodeAs<TranslationUnitDecl>("tu"))
@@ -940,8 +1019,7 @@ void DeclarationCheck::check(const MatchFinder::MatchResult &Result)
                 SourceLocation TypeBegin =
                     VD->getTypeSourceInfo()->getTypeLoc().getBeginLoc();
                 if (TypeBegin.isValid() && TypeBegin == PrevTypeBegin)
-                    diag(VD->getLocation(),
-                         "one declaration must declare exactly one object",
+                    diag(VD->getLocation(), msg::multiDeclaration(),
                          DiagnosticIDs::Error);
                 PrevTypeBegin = TypeBegin;
             }
@@ -992,10 +1070,7 @@ void DeclarationCheck::check(const MatchFinder::MatchResult &Result)
             FD->getTypeSourceInfo()->getType()->isFunctionNoProtoType();
         if (FD->getType()->isFunctionNoProtoType() || WrittenNoProto || KnR ||
             EmptyParens)
-            diag(FD->getLocation(),
-                 "prototype-form functions are mandatory; use (void) for no "
-                 "parameters",
-                 DiagnosticIDs::Error);
+            diag(FD->getLocation(), msg::prototypeForm(), DiagnosticIDs::Error);
     }
     if (const auto *RD = Result.Nodes.getNodeAs<RecordDecl>("record"))
     {
@@ -1007,8 +1082,7 @@ void DeclarationCheck::check(const MatchFinder::MatchResult &Result)
             SourceLocation TypeBegin =
                 F->getTypeSourceInfo()->getTypeLoc().getBeginLoc();
             if (TypeBegin.isValid() && TypeBegin == PrevTypeBegin)
-                diag(F->getLocation(),
-                     "one declaration must declare exactly one object",
+                diag(F->getLocation(), msg::multiDeclaration(),
                      DiagnosticIDs::Error);
             PrevTypeBegin = TypeBegin;
         }
@@ -1052,9 +1126,7 @@ void FallthroughCheck::check(const MatchFinder::MatchResult &Result)
                           Text.find("return") != StringRef::npos;
         bool Marked = Text.contains("/* fall through */");
         if (!Terminated && !Marked)
-            diag(Cur->getBeginLoc(),
-                 "implicit fallthrough; add 'break' or the exact "
-                 "marker '/* fall through */'",
+            diag(Cur->getBeginLoc(), msg::implicitFallthrough(),
                  DiagnosticIDs::Error);
     }
 }
@@ -1081,12 +1153,14 @@ class GreenPreprocessorCallbacks final : public PPCallbacks
         SourceLocation Loc = MacroNameTok.getLocation();
         if (!Owned->isOwned(Loc, SM))
             return; // only project-owned macros are constrained
+        std::string Name =
+            MacroNameTok.getIdentifierInfo()
+                ? MacroNameTok.getIdentifierInfo()->getName().str()
+                : std::string();
         bool ObjectLike = !MI->isFunctionLike();
         if (MI->isFunctionLike())
         {
-            Owner->diag(Loc,
-                        "function-like macros are forbidden; use a "
-                        "function or an object-like constant",
+            Owner->diag(Loc, msg::functionLikeMacro(Name),
                         DiagnosticIDs::Error);
             return;
         }
@@ -1095,9 +1169,7 @@ class GreenPreprocessorCallbacks final : public PPCallbacks
         {
             if (Tok.is(tok::hashhash) || Tok.is(tok::hash))
             {
-                Owner->diag(Loc,
-                            "token-manipulation macros (pasting or "
-                            "stringification) are forbidden",
+                Owner->diag(Loc, msg::tokenManipulationMacro(Name),
                             DiagnosticIDs::Error);
                 return;
             }
@@ -1191,10 +1263,7 @@ void PreprocessorCheck::check(const MatchFinder::MatchResult &Result)
         return;
     if (!M->DefBegin.isValid())
         return;
-    diag(M->DefBegin,
-         "object-like macro '" + M->Name +
-             "' hides control/transition structure",
-         DiagnosticIDs::Error);
+    diag(M->DefBegin, msg::macroHidesControl(M->Name), DiagnosticIDs::Error);
 }
 
 // -- ToolchainBranchingCheck -------------------------------------------------
@@ -1225,10 +1294,7 @@ class GreenBranchingCallbacks final : public PPCallbacks
         {
             if (Text.find(B) != StringRef::npos)
             {
-                Owner->diag(DirectiveLoc,
-                            "compiler/version-conditional preprocessing "
-                            "selects a dialect rather than inhabiting the "
-                            "intersection",
+                Owner->diag(DirectiveLoc, msg::toolchainBranching(),
                             DiagnosticIDs::Error);
                 return;
             }
@@ -1272,10 +1338,7 @@ class GreenBranchingCallbacks final : public PPCallbacks
     {
         if (!Owned->isOwned(Loc, SM))
             return;
-        Owner->diag(Loc,
-                    "compiler/version-conditional preprocessing selects a "
-                    "dialect rather than inhabiting the intersection",
-                    DiagnosticIDs::Error);
+        Owner->diag(Loc, msg::toolchainBranching(), DiagnosticIDs::Error);
     }
 
     ToolchainBranchingCheck *Owner;
@@ -1298,6 +1361,74 @@ void ToolchainBranchingCheck::checkCondition(SourceRange ConditionRange,
 {
     (void)ConditionRange;
     (void)SM;
+}
+
+// -- BracesCheck --------------------------------------------------------------
+
+void BracesCheck::registerMatchers(MatchFinder *Finder)
+{
+    Finder->addMatcher(ifStmt().bind("if"), this);
+    Finder->addMatcher(whileStmt().bind("while"), this);
+    Finder->addMatcher(forStmt().bind("for"), this);
+    Finder->addMatcher(doStmt().bind("do"), this);
+}
+
+// Report one unbraced (or null-statement) controlled body and offer the
+// mechanical brace fix.
+void BracesCheck::reportBody(const Stmt *Body, const char *Kind,
+                             const SourceManager &SM, ASTContext &Ctx)
+{
+    if (!Body || isa<CompoundStmt>(Body))
+        return;
+    SourceLocation Loc = Body->getBeginLoc();
+    if (Loc.isInvalid() || !Owned.isOwned(Loc, SM))
+        return;
+    if (const auto *Null = dyn_cast<NullStmt>(Body))
+    {
+        diag(Loc, msg::bracesEmptyBody(Kind), DiagnosticIDs::Error)
+            << FixItHint::CreateReplacement(
+                   CharSourceRange::getTokenRange(Null->getSourceRange()),
+                   "{}");
+        return;
+    }
+    // Wrap the whole body: `{ ` + original text + ` }`. green fix reformats
+    // afterwards, so the exact spacing here is not load-bearing.
+    CharSourceRange CSR =
+        CharSourceRange::getTokenRange(Body->getSourceRange());
+    std::string Text = Lexer::getSourceText(CSR, SM, Ctx.getLangOpts()).str();
+    diag(Loc, msg::bracesMissing(Kind), DiagnosticIDs::Error)
+        << FixItHint::CreateReplacement(CSR, "{ " + Text + " }");
+}
+
+void BracesCheck::check(const MatchFinder::MatchResult &Result)
+{
+    Owned.configure(*Result.SourceManager);
+    const SourceManager &SM = *Result.SourceManager;
+    ASTContext &Ctx = *Result.Context;
+    if (const auto *If = Result.Nodes.getNodeAs<IfStmt>("if"))
+    {
+        reportBody(If->getThen(), "if", SM, Ctx);
+        const Stmt *Else = If->getElse();
+        // An else-if chain is checked through its own IfStmt node.
+        if (Else && !isa<IfStmt>(Else))
+            reportBody(Else, "else", SM, Ctx);
+        return;
+    }
+    if (const auto *Wh = Result.Nodes.getNodeAs<WhileStmt>("while"))
+    {
+        reportBody(Wh->getBody(), "while", SM, Ctx);
+        return;
+    }
+    if (const auto *Fo = Result.Nodes.getNodeAs<ForStmt>("for"))
+    {
+        reportBody(Fo->getBody(), "for", SM, Ctx);
+        return;
+    }
+    if (const auto *Do = Result.Nodes.getNodeAs<DoStmt>("do"))
+    {
+        reportBody(Do->getBody(), "do", SM, Ctx);
+        return;
+    }
 }
 
 // -- FlatCheck ---------------------------------------------------------------
@@ -1484,11 +1615,9 @@ void FlatCheck::check(const MatchFinder::MatchResult &Result)
     {
         std::string Msg;
         if (Report.hasWork)
-            Msg = "inline computation inside a control/block body; extract it "
-                  "into a worker function";
+            Msg = msg::flatInlineWork();
         else
-            Msg = "more than one inline statement inside a control/block body; "
-                  "extract it into a worker function";
+            Msg = msg::flatGlueRun();
         diag(Loc, Msg, DiagnosticIDs::Error);
     }
 }

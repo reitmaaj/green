@@ -40,7 +40,8 @@ link_directories(${LLVM_LIBRARY_DIR})
 set(GREEN_CLANG_LIBS clang-cpp LLVM)
 
 # --- green-tidy plugin (loadable module) ------------------------------------
-add_library(green-tidy MODULE src/tidy/CgreenModule.cc src/tidy/GreenChecks.cc)
+add_library(green-tidy MODULE src/tidy/CgreenModule.cc src/tidy/GreenChecks.cc
+                                src/tidy/GreenMessages.cc)
 target_link_libraries(green-tidy PRIVATE ${GREEN_CLANG_LIBS})
 target_compile_definitions(green-tidy PRIVATE
     GREEN_CLANG_VERSION="${CLANG_VERSION_STRING}"
@@ -56,7 +57,8 @@ add_executable(green
     src/driver/Format.cc
     src/driver/Fix.cc
     src/driver/Doctor.cc
-    src/driver/Driver.cc)
+    src/driver/Driver.cc
+    src/driver/Guide.cc)
 target_link_libraries(green PRIVATE ${GREEN_CLANG_LIBS})
 target_compile_definitions(green PRIVATE
     GREEN_CLANG_VERSION="${CLANG_VERSION_STRING}"

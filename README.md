@@ -123,8 +123,8 @@ plus this baseline (see [Compilation database normalization](#compile-database-n
 
 ## Semantic checks
 
-Twelve `green-*` checks plus one reused built-in check implement the semantic
-rule. They are loaded as the `green-tidy` plugin into `clang-tidy`.
+Thirteen `green-*` checks implement the semantic rule. They are loaded as
+the `green-tidy` plugin into `clang-tidy`.
 
 | Check | Rule (short) |
 | --- | --- |
@@ -140,9 +140,7 @@ rule. They are loaded as the `green-tidy` plugin into `clang-tidy`.
 | `green-preprocessor` | no function-like / token-manipulation macros; object-like macros may not hide control/transition at expansion |
 | `green-toolchain-branching` | no compiler-identity conditionals |
 | `green-flat` | a *nested* block must be thin; inline computation belongs in a worker |
-
-`readability-braces-around-statements` (with `ShortStatementLines = 0`) is
-reused for mandatory braces.
+| `green-braces` | every controlled body (`if`/`else`/`while`/`do`/`for`) is braced; empty bodies are `{}`, never `;` |
 
 > **Two kinds of explicitness.** Green enforces explicitness at two
 > independent axes. **Expression transparency** keeps effects, mutation,
@@ -384,12 +382,14 @@ future system type once the two are combined in one program.
   [Ownership](#ownership)). The rule does not depend on angle-vs-quoted
   include classification.
 
-### Reused: `readability-braces-around-statements`
+### `green-braces`
 
 Every controlled body (`if`/`else`/`while`/`do`/`for`) uses braces; empty
 bodies use empty blocks (`{}`), never null statements; `else if` remains a
-chain. Configured with `ShortStatementLines = 0` so nothing is ever allowed
-to omit braces.
+chain. `green-braces` is an owned check (it replaced the reused
+`readability-braces-around-statements` built-in) so its diagnostics carry
+the same WHY/CONTEXT/FIX guidance as every other `green-*` finding, and it
+offers the mechanical brace fix-its `green fix` applies.
 
 ---
 
@@ -636,8 +636,10 @@ for include/define context).
 ### `green matrix`
 
 Run only the four compiler cells (GCC C89, GCC C23, Clang C89, Clang C23).
-Prints one `PASS`/`FAIL` line per cell over the whole database, followed by
-captured compiler output for any failing cell.
+Prints one `PASS`/`FAIL` line per cell over the whole database. A failing
+cell is followed by a guide line naming the cell, the enforced mode and
+baseline flags, and the source-fix expectation, then the compiler's own
+captured diagnostics (never a silent FAIL).
 
 ### `green lint [file...]`
 
@@ -668,9 +670,11 @@ Apply mechanically semantics-preserving fix-its to every database unit:
 1. First normalize formatting (`clang-format -i` with the green profile) so
    braces/alignment are canonical before text edits.
 2. Then run `clang-tidy --fix` restricted to the **safe, mechanical** checks:
-   - `readability-braces-around-statements` (add missing braces),
+   - `green-braces` (wrap unbraced bodies; `;` → `{}`),
    - `green-null` (spell `NULL`),
    - `green-transition-boundary` (discarded-result postfix → prefix, etc.).
+3. Finally run `clang-format -i` once more so the inserted braces and
+   rewrites are canonical again.
 
 Fix applies only mechanically safe transformations; it never rewrites
 semantics it cannot prove. After `fix`, run `green check` to confirm the
@@ -743,12 +747,16 @@ CGREEN      PASS
 - `format` is a single column (format is not standard-moded).
 - `CGREEN` is the conjunction of all four matrix cells, tidy, and format.
 
-Clang-tidy and format diagnostics appear on stderr/stdout as they are
-produced, before the summary table.
+Clang-tidy, failing-cell, and format diagnostics appear on stdout as they
+are produced, before the summary table. Failing matrix cells print a guide
+line (cell identity, enforced mode and baseline flags, fix expectation)
+followed by the compiler's diagnostics; failing format files print a guide
+line naming the file and the canonical profile followed by the clang-format
+per-line diagnostics. A FAIL is never silent.
 
 On any source failure the relevant cell prints `FAIL`; the affected
-sub-check's detailed diagnostic or compiler output is shown above/below the
-table, and the process exits 1.
+sub-check's detailed diagnostic or compiler output is shown above the table,
+and the process exits 1.
 
 ### `green matrix` output
 
@@ -759,26 +767,39 @@ Clang C89 PASS
 Clang C23 PASS
 ```
 
-A failing cell prints its captured compiler output beneath the `FAIL` line.
-Exit status is 0 if all four pass, else 1.
+A failing cell prints a guide line (cell identity, enforced strict mode and
+baseline flags, the both-compilers-both-standards expectation) beneath its
+`FAIL` line, followed by the captured compiler diagnostics. Exit status is 0
+if all four pass, else 1.
 
 ### Reading clang-tidy diagnostics
 
-A semantic diagnostic looks like:
+Green's diagnostics are written for automated fixers (LLM consumers): each
+finding is a **single, self-contained line** that states the rule, the
+offending construct, and the profile-canonical remedy:
 
 ```text
 demo.c:13:9: error: inline computation inside a control/block body; extract it
-                    into a worker function [green-flat]
+into a worker function; WHY: ...; CONTEXT: ...; FIX: ... [green-flat]
 ```
 
-- `demo.c:13:9` is `file:line:column`.
-- The message explains the violation.
-- `[check-name]` at the end names the `green-*` (or reused built-in) check
-  that fired.
+- `demo.c:13:9` is `file:line:column`; the offending source line and caret
+  are printed beneath it by clang-tidy.
+- The message begins with the terse violation summary, then carries
+  `WHY` (the principle the check enforces), `CONTEXT` (dynamic facts: the
+  operator, callee, macro or type names, and a source snippet), and
+  `FIX` (the accepted rewrite, whose examples satisfy the profile
+  themselves).
+- Messages never contain a line break, so `[check-name]` at the end always
+  names the `green-*` check that fired on the same line.
 
 All `green-*` violations are reported at `error:` severity. They are emitted
 independently for C89 and C23 runs, so you may see a violation twice (once per
-standard) when a unit is checked under both.
+standard) when a unit is checked under both; the two copies are identical.
+
+The message text is composed by pure builders in `src/tidy/GreenMessages.cc`
+and unit-tested by the `messages` CTest; the `green fix` flow additionally
+attaches mechanical brace fix-its (`green-braces`).
 
 ### Toolchain / capability vs. source failures
 

@@ -1,4 +1,4 @@
-/* green: lint=green-pure-contract */
+/* green: lint=green-pure-contract msg="false PURE annotation: body contains an assignment or update" */
 
 #define GREEN_PURE
 

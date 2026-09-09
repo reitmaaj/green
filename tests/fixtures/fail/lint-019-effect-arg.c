@@ -1,4 +1,4 @@
-/* green: lint=green-effect-boundary */
+/* green: lint=green-effect-boundary msg="result binding" */
 
 int read_record(int fd);
 void consume(int n);

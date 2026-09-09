@@ -1,4 +1,4 @@
-/* green: lint=green-cast-boundary */
+/* green: lint=green-cast-boundary msg="remove the cast" */
 
 int f(int v)
 {

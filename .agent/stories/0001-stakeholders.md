@@ -35,3 +35,12 @@ AS a code reviewer
 I WANT every effect, mutation, and control decision to appear as explicit
 statement-level structure
 SO THAT value computation and state transitions are distinguishable by inspection.
+
+## 0005 automated fixer (LLM)
+
+AS an automated fixer consuming green's diagnostics
+I WANT each finding to be a self-contained, single-line report that states the
+rule violated, names the exact offending construct with context, and prescribes
+profile-canonical fix shapes
+SO THAT I can correct the source without re-reading the rule documentation,
+and never have to guess what a bare FAIL means.

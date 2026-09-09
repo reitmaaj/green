@@ -1,4 +1,4 @@
-/* green: lint=green-flat */
+/* green: lint=green-flat msg="worker function" */
 
 int read_x(void);
 int add(int a, int b);

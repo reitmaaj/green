@@ -327,6 +327,30 @@ class ToolchainBranchingCheck : public ClangTidyCheck
     void checkCondition(SourceRange ConditionRange, const SourceManager &SM);
 };
 
+// green-braces ---------------------------------------------------------------
+// Mandatory braces (replaces the reused readability-braces-around-statements
+// builtin so the message text is green's own): every controlled body
+// (if/else/while/do/for) is a compound statement; empty bodies are `{}`,
+// never a null statement `;`; an `else if` remains a chain. Fix-its wrap the
+// body in braces (or replace `;` with `{}`) for the safe `green fix` flow.
+class BracesCheck : public ClangTidyCheck
+{
+  public:
+    BracesCheck(llvm::StringRef Name, ClangTidyContext *Context)
+        : ClangTidyCheck(Name, Context),
+          Owned(Options.get("ProjectRoots", ""), Options.get("Exclude", ""))
+    {
+    }
+    void registerMatchers(ast_matchers::MatchFinder *Finder) override;
+    void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
+
+  private:
+    void reportBody(const Stmt *Body, const char *Kind, const SourceManager &SM,
+                    ASTContext &Ctx);
+
+    Ownership Owned;
+};
+
 // green-flat -----------------------------------------------------------------
 // Structural decomposition / test-boundary discipline: every nontrivial
 // computation reached through control flow should acquire a named function

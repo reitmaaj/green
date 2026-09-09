@@ -50,7 +50,7 @@ authoritative number of `.c` files in each directory.
     (single glue per run, delegation to workers, nested control) and every
     failing shape (inline computation and over-glued runs in `if`/`else`,
     `while`/`for`/`do`, braced `switch` cases, and bare `{}` blocks).
-  - readability-braces-around-statements: unbraced if/else/while/for/do,
+  - readability/green-braces fixtures: unbraced if/else/while/for/do,
     null-statement empty body, unbraced else branch.
 - matrix (15): C99/C23-only syntax rejected by the C89 cell (`//` comment,
   for-loop declaration, mixed declarations, `long long`, designated
@@ -58,6 +58,17 @@ authoritative number of `.c` files in each directory.
   rejected by the C23 cell (`typeof`, `typeof_unqual`, `true`, `false`, `bool`,
   `nullptr`, `alignas`).
 - format (15): non-canonical presentation that clang-format rewrites.
+
+## Informative-message tags
+
+Lint-fail fixtures may carry repeatable `msg="fragment"` tags in the metadata
+header. When present, `tests/harness/run_all.sh` requires each fragment to
+appear in the fixture's diagnostics under both C89 and C23, pinning the
+informative (WHY/CONTEXT/FIX) message content. Message builder unit tests
+live in `tests/messages/GreenMessagesTest.cc` (CTest `messages`, label
+`unit`); the driver guide lines are covered by the driver output test inside
+`run_all.sh` (failing-matrix and format diagnostics must be present, never a
+silent FAIL).
 
 ## Language-mode dependent constructs
 

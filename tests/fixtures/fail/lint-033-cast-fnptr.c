@@ -1,4 +1,4 @@
-/* green: lint=green-cast-boundary */
+/* green: lint=green-cast-boundary msg="object/function pointer" */
 
 int f(int *ip)
 {
