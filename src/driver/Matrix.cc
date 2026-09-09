@@ -58,8 +58,14 @@ static bool runCell(const std::string &Compiler,
         if (R.ExitCode != 0)
         {
             // A non-0 here might be a capability/option error (exit 3-like)
-            // or a source violation (exit 1). We surface stderr.
+            // or a source violation (exit 1). We surface both streams.
             Combined += R.Stderr;
+            if (!R.Stdout.empty())
+            {
+                Combined += R.Stdout;
+                if (R.Stderr.empty() && Combined.back() != '\n')
+                    Combined += '\n';
+            }
             Code = 1;
         }
     }

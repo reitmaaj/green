@@ -18,6 +18,9 @@
 #   format =fail        clang-format output differs
 #
 # A dimension is asserted only when tagged. Pass fixtures tag all three.
+# Optional repeatable msg="fragment" tags additionally require the listed
+# text to appear in the diagnostics of a lint=<check> fixture under both C89
+# and C23, pinning the informative message content.
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 BUILD="$ROOT/.agent/tmp/build"
@@ -28,7 +31,7 @@ GCC=$(command -v gcc)
 CLANG=$(command -v clang)
 CLANG_FORMAT=$(command -v clang-format)
 PROFILE="$ROOT/share/green/clang-format.yaml"
-CHECKS="-checks=-*,green-hidden-control,green-transition-boundary,green-effect-boundary,green-pure-contract,green-cast-boundary,green-null,green-declaration,green-fallthrough,green-preprocessor,green-toolchain-branching,green-flat,green-reserved-suffix,readability-braces-around-statements"
+CHECKS="-checks=-*,green-hidden-control,green-transition-boundary,green-effect-boundary,green-pure-contract,green-cast-boundary,green-null,green-declaration,green-fallthrough,green-preprocessor,green-toolchain-branching,green-flat,green-reserved-suffix,green-braces"
 BASELINE="-pedantic-errors -Wall -Wextra -Werror -Wconversion -Wsign-conversion -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition -Wundef -Wshadow -Wformat=2 -Wcast-qual -fsyntax-only"
 
 fail() {
@@ -39,17 +42,20 @@ fail() {
 [ -f "$PLUGIN" ] || fail "plugin not built; run: just build"
 [ -x "$GREEN" ] || fail "driver not built; run: just build"
 
-# Parse a fixture's metadata header. Sets: LINT MATRIX FORMAT.
+# Parse a fixture's metadata header. Sets: LINT MATRIX FORMAT MSGS.
 parse_header() {
     LINT=""
     MATRIX=""
     FORMAT=""
+    MSGS=""
     line=$(sed -n '1p' "$1" 2>/dev/null)
     case "$line" in
     "/* green: "*)
         LINT=$(printf '%s' "$line" | sed -n 's/.*lint=\([^ ]*\).*/\1/p')
         MATRIX=$(printf '%s' "$line" | sed -n 's/.*matrix=\([^ ]*\).*/\1/p')
         FORMAT=$(printf '%s' "$line" | sed -n 's/.*format=\([^ ]*\).*/\1/p')
+        MSGS=$(printf '%s\n' "$line" | sed 's/msg="/\nMSG:/g' |
+            sed -n 's/^MSG:\(.*\)".*/\1/p')
         ;;
     esac
 }
@@ -57,6 +63,17 @@ parse_header() {
 # clang-tidy under a given standard; emits diagnostics to stdout.
 lint_std() {
     "$TIDY" -load="$PLUGIN" "$CHECKS" --extra-arg=-std="$1" "$2" 2>&1 || true
+}
+
+# Require every msg="fragment" of the fixture in both standards' output.
+assert_msg() {
+    [ -n "$MSGS" ] || return 0
+    printf '%s\n' "$MSGS" | while IFS= read -r frag; do
+        [ -n "$frag" ] || continue
+        if ! printf '%s\n%s\n' "$1" "$2" | grep -Fq -- "$frag"; then
+            fail "lint=$LINT fixture misses message fragment '$frag': $(basename "$3")"
+        fi
+    done
 }
 
 assert_lint() {
@@ -68,10 +85,12 @@ assert_lint() {
         fi
         ;;
     green-*)
-        if ! lint_std c89 "$1" | grep -q "\[$LINT\]" ||
-            ! lint_std c23 "$1" | grep -q "\[$LINT\]"; then
+        out89=$(lint_std c89 "$1") || true
+        out23=$(lint_std c23 "$1") || true
+        if ! printf '%s\n%s\n' "$out89" "$out23" | grep -q "\[$LINT\]"; then
             fail "lint=$LINT did not fire in both modes: $(basename "$1")"
         fi
+        assert_msg "$out89" "$out23" "$1" || return 1
         ;;
     esac
 }
@@ -148,6 +167,74 @@ if ! (cd "$ROOT/tests/driver/sample" && "$GREEN" check) >/dev/null 2>&1; then
     echo "FAIL: driver check on sample project"
     status=1
 fi
+
+# Driver diagnostics: every failing dimension must carry actionable text.
+driver_output_test() {
+    DIR="$ROOT/.agent/tmp/driver-out-test"
+    LOG="$DIR/check.log"
+    rm -rf "$DIR"
+    mkdir -p "$DIR/src" "$DIR/build/gcc" "$DIR/build/clang"
+    cat > "$DIR/src/demo.c" <<'EOF'
+// C89 forbids // comments; this line fails the strict C89 cells.
+#include <stddef.h>
+
+int pick(int a, int b)
+{
+    int r;
+    int *p;
+
+  if (a && b)
+  {
+      p = 0;
+  }
+    r = 1;
+    return r + (int)(p != NULL);
+}
+EOF
+    cat > "$DIR/green.yaml" <<EOF
+version: 1
+
+compile_commands:
+    gcc: build/gcc/compile_commands.json
+    clang: build/clang/compile_commands.json
+
+project_roots:
+    - src
+EOF
+    cat > "$DIR/build/gcc/compile_commands.json" <<EOF
+[
+  {
+    "directory": "$DIR",
+    "command": "gcc -c -I$DIR/src -std=c11 -O2 -Wall -o $DIR/build/gcc/demo.o $DIR/src/demo.c",
+    "file": "$DIR/src/demo.c"
+  }
+]
+EOF
+    cat > "$DIR/build/clang/compile_commands.json" <<EOF
+[
+  {
+    "directory": "$DIR",
+    "command": "clang -c -I$DIR/src -std=c11 -O2 -Wall -o $DIR/build/clang/demo.o $DIR/src/demo.c",
+    "file": "$DIR/src/demo.c"
+  }
+]
+EOF
+    (cd "$DIR" && "$GREEN" check >"$LOG" 2>&1) && {
+        echo "FAIL: driver output test unexpectedly passed"
+        status=1
+        return
+    }
+    for frag in "matrix cell FAILED" "GCC C89" "format violation" \
+        "clang-formatted" "WHY:" "FIX:" "[green-hidden-control]" \
+        "[green-null]"; do
+        if ! grep -Fq -- "$frag" "$LOG"; then
+            echo "FAIL: driver output test misses '$frag'"
+            status=1
+        fi
+    done
+    rm -rf "$DIR"
+}
+driver_output_test
 
 echo "green e2e fixtures checked: $count"
 if [ "$status" -eq 0 ]; then

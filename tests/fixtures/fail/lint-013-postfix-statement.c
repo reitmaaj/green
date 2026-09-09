@@ -1,4 +1,4 @@
-/* green: lint=green-transition-boundary */
+/* green: lint=green-transition-boundary msg="use the prefix form" */
 
 int f(int n)
 {

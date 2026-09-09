@@ -1,4 +1,4 @@
-/* green: lint=green-toolchain-branching */
+/* green: lint=green-toolchain-branching msg="compatibility_paths" */
 
 int f(int x)
 {

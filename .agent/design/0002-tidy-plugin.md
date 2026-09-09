@@ -22,10 +22,28 @@ green-fallthrough           implicit rejected; exact /* fall through */ marker
 green-preprocessor          function-like macros, pasting/stringify, macro-generated
                             control/transition via expansion-site attribution
 green-toolchain-branching   __STDC_VERSION__/__GNUC__/__clang__ conditionals
+green-braces                mandatory braces; empty bodies {} not ;
 ```
 
-Reused built-in: `readability-braces-around-statements` with
-`ShortStatementLines = 0`.
+## Diagnostic content
+
+Diagnostic messages are written for automated fixers (LLM consumers). All
+`green-*` messages are composed by pure builders in
+`src/tidy/GreenMessages.{h,cc}` (no Clang dependency, unit tested standalone)
+and rendered by clang-tidy as one single line:
+
+```text
+<terse summary>; WHY <principle>; CONTEXT <dynamic facts>; FIX <canonical remedy>
+```
+
+- Messages stay newline-free so the `[check-name]` suffix and the
+  source/caret rendering stay intact.
+- Dynamic facts (operator, callee, types, names, source snippets) are passed
+  to the builders by the checks; CONTEXT snippets are whitespace-collapsed by
+  `cleanSnippet`.
+- FIX examples always satisfy the profile themselves.
+- Driver guide lines (`src/driver/Guide.{h,cc}`) frame failing matrix cells
+  and format findings with the enforced profile so no FAIL is silent.
 
 ## Principles
 

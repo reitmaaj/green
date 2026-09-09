@@ -4,6 +4,7 @@
 #include "Driver.h"
 #include "Fix.h"
 #include "Format.h"
+#include "Guide.h"
 #include "Matrix.h"
 #include "Process.h"
 #include "green/version.h"
@@ -69,13 +70,19 @@ std::string joinList(const std::vector<std::string> &V)
 // so the options are repeated across every green-* check.
 std::string buildTidyConfig(const Config &Cfg)
 {
-    static const char *Checks[] = {
-        "green-hidden-control",      "green-transition-boundary",
-        "green-effect-boundary",     "green-pure-contract",
-        "green-cast-boundary",       "green-null",
-        "green-reserved-suffix",     "green-declaration",
-        "green-fallthrough",         "green-preprocessor",
-        "green-toolchain-branching", "green-flat"};
+    static const char *Checks[] = {"green-hidden-control",
+                                   "green-transition-boundary",
+                                   "green-effect-boundary",
+                                   "green-pure-contract",
+                                   "green-cast-boundary",
+                                   "green-null",
+                                   "green-reserved-suffix",
+                                   "green-declaration",
+                                   "green-fallthrough",
+                                   "green-preprocessor",
+                                   "green-toolchain-branching",
+                                   "green-braces",
+                                   "green-flat"};
     std::string Roots = joinList(Cfg.ProjectRoots);
     std::string Exclude = joinList(Cfg.Exclude);
     std::string Compat = joinList(Cfg.CompatibilityPaths);
@@ -107,7 +114,7 @@ int runLint(const std::string &Tidy, const std::string &Plugin,
         "green-null,green-declaration,green-fallthrough,green-preprocessor,"
         "green-toolchain-branching,green-flat,"
         "green-reserved-suffix,"
-        "readability-braces-around-statements";
+        "green-braces";
     int Status = EXIT_GREEN;
     for (const char *Std : {"c89", "c23"})
     {
@@ -204,7 +211,15 @@ int main(int Argc, char **Argv)
         {
             std::cout << C.Label << " " << (C.Pass ? "PASS" : "FAIL") << "\n";
             if (!C.Pass)
-                std::cout << C.Output << "\n";
+            {
+                std::cout << matrixCellGuide(C.Label) << "\n";
+                if (!C.Output.empty())
+                {
+                    std::cout << C.Output;
+                    if (C.Output.back() != '\n')
+                        std::cout << "\n";
+                }
+            }
         }
         return Pass ? EXIT_GREEN : EXIT_VIOLATION;
     }
@@ -265,6 +280,20 @@ int main(int Argc, char **Argv)
         bool Fatal = false;
         int LintStatus = runLint(Tidy, GREEN_PLUGIN_PATH, CompileDBDir,
                                  TidyConfig, Files, Fatal);
+        // Failing cells must not be silent: print guidance and the
+        // compiler's own diagnostics above the summary table.
+        for (const auto &C : Cells)
+        {
+            if (C.Pass)
+                continue;
+            std::cout << matrixCellGuide(C.Label) << "\n";
+            if (!C.Output.empty())
+            {
+                std::cout << C.Output;
+                if (C.Output.back() != '\n')
+                    std::cout << "\n";
+            }
+        }
         int FormatStatus =
             runFormatCommand(Format, GREEN_FORMAT_PATH, Files, true);
         std::cout << "            C89    C23\n";

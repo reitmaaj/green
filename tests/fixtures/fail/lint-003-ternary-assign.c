@@ -1,4 +1,4 @@
-/* green: lint=green-hidden-control */
+/* green: lint=green-hidden-control msg="if/else that assigns" */
 
 int f(int c, int a, int b)
 {

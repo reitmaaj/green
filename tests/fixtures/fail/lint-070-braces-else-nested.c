@@ -1,4 +1,4 @@
-/* green: lint=readability-braces-around-statements */
+/* green: lint=green-braces msg="wrapped in braces" */
 
 int f(int a, int b)
 {

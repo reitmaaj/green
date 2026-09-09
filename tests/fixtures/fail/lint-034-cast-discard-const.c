@@ -1,4 +1,4 @@
-/* green: lint=green-cast-boundary */
+/* green: lint=green-cast-boundary msg="discards const/volatile qualification" */
 
 int f(const char *cc)
 {

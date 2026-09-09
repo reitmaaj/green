@@ -1,4 +1,4 @@
-/* green: lint=green-cast-boundary */
+/* green: lint=green-cast-boundary msg="integer/pointer" */
 
 int f(unsigned long addr)
 {

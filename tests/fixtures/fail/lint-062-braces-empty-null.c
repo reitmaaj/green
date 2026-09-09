@@ -1,4 +1,4 @@
-/* green: lint=readability-braces-around-statements */
+/* green: lint=green-braces msg="must be '{}', not ';'" */
 
 int f(int *ready)
 {

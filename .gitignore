@@ -53,3 +53,5 @@
 !tests/driver/sample/*.yaml
 !tests/config/
 !tests/config/*.cc
+!tests/messages/
+!tests/messages/*.cc

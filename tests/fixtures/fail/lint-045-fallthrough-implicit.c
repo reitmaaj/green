@@ -1,4 +1,4 @@
-/* green: lint=green-fallthrough */
+/* green: lint=green-fallthrough msg="break" msg="fall through" */
 
 int f(int s)
 {

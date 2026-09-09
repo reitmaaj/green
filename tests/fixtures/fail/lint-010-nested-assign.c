@@ -1,4 +1,4 @@
-/* green: lint=green-transition-boundary */
+/* green: lint=green-transition-boundary msg="standalone statement" */
 
 int f(int y, int z)
 {

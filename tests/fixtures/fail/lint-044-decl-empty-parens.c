@@ -1,4 +1,4 @@
-/* green: lint=green-declaration */
+/* green: lint=green-declaration msg="for no parameters" msg="(void)" */
 
 int poll_status();
 

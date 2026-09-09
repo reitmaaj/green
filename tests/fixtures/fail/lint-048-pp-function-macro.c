@@ -1,4 +1,4 @@
-/* green: lint=green-preprocessor */
+/* green: lint=green-preprocessor msg="function-like macros are forbidden" */
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 

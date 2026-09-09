@@ -26,6 +26,7 @@ class GreenModule : public ClangTidyModule
         Factories.registerCheck<PreprocessorCheck>("green-preprocessor");
         Factories.registerCheck<ToolchainBranchingCheck>(
             "green-toolchain-branching");
+        Factories.registerCheck<BracesCheck>("green-braces");
         Factories.registerCheck<FlatCheck>("green-flat");
     }
 };

@@ -17,9 +17,8 @@ int runFix(const std::string &Format, const std::string &Tidy,
     (void)F;
 
     // 2. Apply safe clang-tidy fix-its only.
-    const std::string Checks =
-        "-checks=-*,readability-braces-around-statements,green-null,"
-        "green-transition-boundary";
+    const std::string Checks = "-checks=-*,green-braces,green-null,"
+                               "green-transition-boundary";
     for (const auto &File : Files)
     {
         std::vector<std::string> Args = {
@@ -29,6 +28,9 @@ int runFix(const std::string &Format, const std::string &Tidy,
         if (R.ExitCode != 0)
             Status = EXIT_VIOLATION;
     }
+    // Normalize the inserted braces and formatting canonically.
+    for (const auto &File : Files)
+        runCommand({Format, "-style=file:" + Profile, "-i", File});
     return Status;
 }
 

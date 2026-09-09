@@ -1,4 +1,4 @@
-/* green: lint=green-hidden-control */
+/* green: lint=green-hidden-control msg="if (a) { if (b)" msg="short-circuit" */
 
 int f(int a, int b)
 {
