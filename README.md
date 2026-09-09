@@ -864,7 +864,7 @@ just sanitize   # ASan + UBSan build; run the lint fixtures under both
 just valgrind   # valgrind memcheck; degrades to UNSUPPORTED on this toolchain
 ```
 
-The e2e suite lives in `tests/fixtures/` (121 passing and 132 failing
+The e2e suite lives in `tests/fixtures/` (130 passing and 144 failing
 examples). Each fixture declares its expectations in a metadata header
 comment:
 

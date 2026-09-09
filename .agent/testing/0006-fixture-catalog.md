@@ -1,9 +1,9 @@
-# Testing: e2e fixture catalog (100 pass + 100 fail, growing)
+# Testing: e2e fixture catalog (growing)
 
 Each fixture in `tests/fixtures/pass|fail/NNN-<dim>-<case>.c` carries a metadata
 header `/* green: lint=... matrix=... format=... */`. A dimension is asserted
 only when tagged. Counts below are illustrative category targets; the live
-totals (121 pass / 132 fail after the `green-flat` expansion) are the
+totals (130 pass / 144 fail) are the
 authoritative number of `.c` files in each directory.
 
 - `lint=pass` / `lint=<check>` : clang-tidy, asserted under C89 and C23.
