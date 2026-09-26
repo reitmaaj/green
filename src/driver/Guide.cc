@@ -24,7 +24,8 @@ std::string matrixCellGuide(const std::string &CellLabel)
            "(-pedantic-errors -Wall -Wextra -Werror -Wconversion "
            "-Wsign-conversion -Wstrict-prototypes -Wmissing-prototypes "
            "-Wold-style-definition -Wundef -Wshadow -Wformat=2 -Wcast-qual "
-           "-fsyntax-only); the same source must pass with GCC and Clang "
+           "-Wno-long-long -fsyntax-only); the same source must pass with "
+           "GCC and Clang "
            "under both -std=c89 and -std=c23, so fix the source (never the "
            "flags) and re-run green check; the compiler diagnostics below "
            "localize each violation:";

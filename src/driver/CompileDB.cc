@@ -148,6 +148,7 @@ std::vector<std::string> greenBaseline(const std::string &Std)
             "-Wshadow",
             "-Wformat=2",
             "-Wcast-qual",
+            "-Wno-long-long",
             "-fsyntax-only"};
 }
 

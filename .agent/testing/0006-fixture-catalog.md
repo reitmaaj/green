@@ -53,10 +53,12 @@ authoritative number of `.c` files in each directory.
   - readability/green-braces fixtures: unbraced if/else/while/for/do,
     null-statement empty body, unbraced else branch.
 - matrix (15): C99/C23-only syntax rejected by the C89 cell (`//` comment,
-  for-loop declaration, mixed declarations, `long long`, designated
-  initializers, `inline`, `_Bool`, hex float) and C23-only keyword-as-identifier
+  for-loop declaration, mixed declarations, designated initializers, `inline`,
+  `_Bool`, hex float) and C23-only keyword-as-identifier
   rejected by the C23 cell (`typeof`, `typeof_unqual`, `true`, `false`, `bool`,
-  `nullptr`, `alignas`).
+  `nullptr`, `alignas`). `long long` is *not* in this rejected set: it is
+  admitted by the `-Wno-long-long` baseline flag, with the acceptance proven
+  by the `matrix=pass` fixture `matrix-016-longlong.c`.
 - format (15): non-canonical presentation that clang-format rewrites.
 
 ## Informative-message tags

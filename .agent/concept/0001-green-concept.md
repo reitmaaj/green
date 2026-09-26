@@ -25,6 +25,10 @@ C23 means ISO/IEC 9899:2024 mode selected with `-std=c23`. `green` green
 means accepted by the selected compiler implementations, not formal
 certification of complete ISO C23 implementation by those compilers.
 
+`long long` / `unsigned long long` is admitted as a documented extension to
+the strict C89 cell (via the `-Wno-long-long` baseline flag); all other
+C99/C23-only syntax remains rejected by that cell.
+
 ## Governing semantic rule
 
 ```text

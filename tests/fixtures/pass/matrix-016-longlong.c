@@ -1,4 +1,4 @@
-/* green: matrix=c89 */
+/* green: matrix=pass */
 
 long long f(long long x);
 

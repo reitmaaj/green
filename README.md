@@ -112,8 +112,14 @@ profile. The profile flags (`share/...`/`src/driver/CompileDB.cc`,
 -Wconversion -Wsign-conversion -Wstrict-prototypes
 -Wmissing-prototypes -Wold-style-definition
 -Wundef -Wshadow -Wformat=2 -Wcast-qual
+-Wno-long-long
 -fsyntax-only
 ```
+
+The `-Wno-long-long` flag relaxes the strict C89 cell: `long long` / `unsigned
+long long` (a C99 type) is accepted rather than rejected by `-pedantic-errors`.
+It is a deliberate extension over pure ISO C89; every other pedantic and
+conversion warning stays enforced.
 
 Pre-existing `-std`, `-W*`, optimization, debug, and codegen options from the
 compilation database are stripped and replaced by `-std=c89` / `-std=c23`
