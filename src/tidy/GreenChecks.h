@@ -12,6 +12,7 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/PPCallbacks.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -96,17 +97,16 @@ class PureRegistry
 {
   public:
     void addConfigured(llvm::StringRef List);
-    void recordMarkerLine(unsigned Line)
+    void recordMarkerLine(FileID F, unsigned Line)
     {
-        MarkerLine = Line;
+        MarkerLines[F].insert(Line);
     }
-    void clearMarker()
+    bool hasMarker(FileID F, unsigned Line) const
     {
-        MarkerLine = 0;
-    }
-    unsigned markerLine() const
-    {
-        return MarkerLine;
+        auto It = MarkerLines.find(F);
+        if (It == MarkerLines.end())
+            return false;
+        return It->second.count(Line) != 0;
     }
     bool isPure(llvm::StringRef Name) const
     {
@@ -119,7 +119,7 @@ class PureRegistry
 
   private:
     llvm::StringSet<> Names;
-    unsigned MarkerLine = 0;
+    llvm::DenseMap<FileID, llvm::DenseSet<unsigned>> MarkerLines;
 };
 
 // green-hidden-control -----------------------------------------------------

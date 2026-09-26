@@ -239,6 +239,7 @@ class GreenPurePPCallbacks final : public PPCallbacks
             MacroNameTok.getIdentifierInfo()->getName() == "GREEN_PURE")
         {
             Pure->recordMarkerLine(
+                SM.getFileID(MacroNameTok.getLocation()),
                 SM.getSpellingLineNumber(MacroNameTok.getLocation()));
         }
     }
@@ -583,9 +584,10 @@ void EffectBoundaryCheck::check(const MatchFinder::MatchResult &Result)
     {
         unsigned FuncLine =
             Result.SourceManager->getSpellingLineNumber(FD->getBeginLoc());
-        if (Pure.markerLine() != 0 && FuncLine == Pure.markerLine() + 1)
+        if (FuncLine != 0 &&
+            Pure.hasMarker(Result.SourceManager->getFileID(FD->getBeginLoc()),
+                           FuncLine - 1))
         {
-            Pure.clearMarker();
             Pure.addMarked(FD->getName());
         }
         return;
@@ -753,13 +755,12 @@ void PureContractCheck::check(const MatchFinder::MatchResult &Result)
         return;
     unsigned FuncLine =
         Result.SourceManager->getSpellingLineNumber(FD->getBeginLoc());
-    unsigned MarkerLine = Pure.markerLine();
-    if (MarkerLine == 0 || FuncLine != MarkerLine + 1)
+    FileID FuncFile = Result.SourceManager->getFileID(FD->getBeginLoc());
+    if (FuncLine == 0 || !Pure.hasMarker(FuncFile, FuncLine - 1))
     {
         // This function is not marked; nothing to validate.
         return;
     }
-    Pure.clearMarker();
     if (!FD->hasBody())
         return;
     // Validate the marked definition is pure.
